@@ -34,6 +34,15 @@ window.NOTA_FIREBASE_CONFIG = {
   appId: "1:829323525338:web:427083e8b3a226381979e3"
 };
 
+/* App Check — reCAPTCHA Enterprise site key for the hosted site.
+ * Registered 2026-11-18 in Firebase console > App Check for nota-web
+ * (provider: Fraud Defense / reCAPTCHA Enterprise, domain
+ * emonizeryan.github.io). A site key is a public client identifier,
+ * not a secret — it is meant to ship in client code. Without it,
+ * App Check enforcement rejects AI Logic calls and the app falls
+ * back to demo mode. */
+window.NOTA_RECAPTCHA_SITE_KEY = "6Lc8ViYuAAAAAMgYrpE8InW5GAIUXIh70f1ycnBD";
+
 /* Cloud model IDs — verified 2026-11-18 against the live Firebase AI
  * Logic docs (firebase.google.com/docs/ai-logic) and the Firebase JS
  * SDK changelog (@firebase/ai 2.5.0, firebase 12.5.0):
