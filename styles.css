@@ -1,0 +1,270 @@
+/* Nota — clean, calm, paper-like notes app. Warm off-white, ink text, one deep-green accent. */
+:root {
+  --bg: #fdfbf7;
+  --surface: #ffffff;
+  --surface-soft: #f4efe6;
+  --ink: #23241f;
+  --ink-soft: #5c5a52;
+  --line: #e3ddd0;
+  --accent: #2f5d50;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2ece7;
+  --cloud: #3d5a80;
+  --cloud-soft: #e3ebf5;
+  --demo: #8a6d1b;
+  --demo-soft: #f7ecd2;
+  --danger: #9b2c2c;
+  --radius: 14px;
+  --shadow: 0 1px 3px rgba(35, 36, 31, 0.08), 0 4px 14px rgba(35, 36, 31, 0.05);
+}
+
+* { box-sizing: border-box; }
+
+html { font-size: 16px; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.55;
+}
+
+h1, h2, h3 { line-height: 1.25; margin: 0; }
+
+button { font: inherit; cursor: pointer; }
+input, textarea, select { font: inherit; color: inherit; }
+
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 26px; font-weight: 700;
+}
+.brand h1 { font-family: Georgia, "Times New Roman", serif; font-size: 28px; letter-spacing: 0.2px; }
+.tagline { margin: 0; color: var(--ink-soft); font-size: 14px; }
+
+.top-status { display: flex; gap: 8px; flex-wrap: wrap; }
+.pill {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pill.ok { background: var(--accent-soft); border-color: #bcd4c7; }
+.pill.warn { background: var(--demo-soft); border-color: #e5cf96; }
+
+/* ---------- AI status panel (slim banner + expandable details) ---------- */
+.ai-status {
+  margin: 12px 20px 0;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.ai-banner { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.ai-banner strong { font-size: 14.5px; }
+.ai-banner .btn { padding: 4px 11px; font-size: 13px; }
+.ai-details { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.ai-status-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.ai-status-row strong { font-size: 15px; }
+.ai-status-detail { color: var(--ink-soft); font-size: 14px; }
+.progress {
+  margin-top: 10px;
+  height: 8px;
+  background: var(--surface-soft);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.ai-status-actions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+}
+.switch-label { display: flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+.switch-label input { width: 18px; height: 18px; accent-color: var(--accent); }
+.hint { color: var(--ink-soft); font-size: 13px; }
+.ai-note { margin: 10px 0 0; font-size: 13.5px; color: var(--ink-soft); }
+
+/* ---------- Layout ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  padding: 16px 20px;
+  max-width: 1180px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  position: sticky;
+  top: 12px;
+}
+.sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sidebar-head h2 { font-size: 18px; }
+.search-label { display: block; margin-top: 12px; font-size: 13px; color: var(--ink-soft); }
+.search-label input {
+  display: block; width: 100%; margin-top: 4px;
+  padding: 9px 10px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg);
+}
+.note-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-height: 52vh; overflow-y: auto; overflow-x: hidden; }
+.note-list li {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: var(--bg);
+  min-width: 0;
+  overflow: hidden;
+}
+.note-list li:hover { border-color: var(--accent); }
+.note-list li.active { border-color: var(--accent); background: var(--accent-soft); }
+.note-list .nl-title { font-weight: 650; font-size: 14.5px; }
+.note-list .nl-preview { color: var(--ink-soft); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-list .nl-date { color: var(--ink-soft); font-size: 12px; }
+.note-list .nl-empty { color: var(--ink-soft); font-size: 14px; text-align: center; padding: 18px 8px; }
+.sidebar-foot { font-size: 12.5px; color: var(--ink-soft); margin: 12px 0 0; }
+
+/* ---------- Editor ---------- */
+.editor {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+#note-title {
+  width: 100%;
+  border: none; outline: none;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 24px; font-weight: 700;
+  padding: 2px 0 8px;
+  background: transparent;
+}
+#note-body {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  /* 209px = 7 full text lines (7 × 26.4px) + 24px padding, so the last
+     visible line is never sliced in half in a screenshot. */
+  min-height: 209px;
+  resize: vertical;
+  line-height: 1.65;
+  background: var(--bg);
+}
+#note-body:focus, #note-title:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.editor-meta {
+  display: flex; flex-wrap: wrap; gap: 6px 16px;
+  margin-top: 8px; font-size: 13px; color: var(--ink-soft);
+}
+.route-hint { font-weight: 600; color: var(--accent); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 650; }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-ai { background: var(--accent-soft); border-color: #bcd4c7; }
+/* Summarise carries both .btn-ai and .btn-primary: the combined rule must
+   win over .btn-ai so the primary action is solid green with white text
+   (not white text on the pale .btn-ai background). */
+.btn-ai.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-deep { background: var(--cloud-soft); border-color: #b8c8de; }
+.btn-danger { color: var(--danger); border-color: #e3b7b7; }
+/* Quiet destructive action: plain muted text until hovered. */
+.btn-quiet { border-color: transparent; background: transparent; color: var(--ink-soft); }
+.btn-quiet:hover { border-color: var(--line); color: var(--danger); }
+
+/* ---------- AI result ---------- */
+.ai-result {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 16px;
+}
+.ai-result-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ai-result-head h3 { font-size: 17px; }
+.ai-result-body { margin-top: 10px; white-space: pre-wrap; word-break: break-word; }
+.ai-result-body ul { margin: 6px 0; padding-left: 20px; }
+.ai-result-body .tag { display: inline-block; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; margin: 2px 4px 2px 0; font-size: 13px; }
+.ai-result-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+
+.chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 11px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+}
+.chip-device { background: var(--accent-soft); border-color: #9dbfaf; color: #1d4438; }
+.chip-cloud { background: var(--cloud-soft); border-color: #a9bedd; color: #24466e; }
+.chip-demo { background: var(--demo-soft); border-color: #e0c98d; color: #6d5410; }
+
+/* ---------- Footer ---------- */
+.footer {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 8px 20px 28px;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+.footer code { background: var(--surface-soft); padding: 1px 5px; border-radius: 5px; font-size: 12.5px; }
+
+/* ---------- Mobile ---------- */
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; padding: 12px; }
+  .ai-status { margin: 12px 12px 0; }
+  .topbar { padding: 12px; }
+  .sidebar { position: static; }
+  .note-list { max-height: 220px; }
+  .editor { padding: 14px; }
+  #note-title { font-size: 21px; }
+  .brand h1 { font-size: 24px; }
+}
