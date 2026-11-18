@@ -19,6 +19,13 @@ cloud; **Gemini Pro** runs only when you press “Deep analysis”.
   formal / simpler), Proofread, Draft a reply.
 - **Deep analysis** — an explicit button that runs in the cloud on
   Gemini Pro. Never the default.
+- **Flashcards for studying** — under “More ▾ → Study”, the AI turns
+  the active note into 5–8 question/answer cards. Tap a card to flip
+  it, move with Previous / Next, shuffle the deck, and mark cards
+  “Know ✓” / “Not yet ✗” — progress (“3 of 8 known”) is saved per
+  note, so reopening the note brings its deck back. Same hybrid
+  routing as the other actions; in demo mode the cards are made by
+  the local extractive engine (fill-in-the-blank) and labelled Demo.
 - **A visible chip on every answer** — `ON DEVICE` or `IN CLOUD` — read
   from the response itself (`response.inferenceSource`). The routing
   rule is shown under the editor before you run anything.

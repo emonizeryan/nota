@@ -46,16 +46,22 @@ window.NOTA_RECAPTCHA_SITE_KEY = "6Lc8ViYuAAAAAMgYrpE8InW5GAIUXIh70f1ycnBD";
 /* Cloud model IDs — verified 2026-11-18 against the live Firebase AI
  * Logic docs (firebase.google.com/docs/ai-logic) and the Firebase JS
  * SDK changelog (@firebase/ai 2.5.0, firebase 12.5.0):
- *   - Default cloud fallback: gemini-3.8-flash (GA 2 Sep 2026; free tier;
- *     the Google-named replacement for gemini-2.5-pro).
- *   - Cheap cloud fallback: gemini-3.5-flash-lite (GA 21 Jul 2026).
- *   - Deep analysis (explicit button only): gemini-3.1-pro-preview
- *     (paid-only preview — verify it is still served on the day you
- *     submit; if it is gone, the button falls back to gemini-3.8-flash
- *     and says so in the result note).
+ *   - EFFECTIVE cloud model (used by every route): gemini-3.5-flash-lite.
+ *     Proven live by probe 2026-11-18 — it is the model the Firebase
+ *     error message itself tells you to use, and the model the 12.5.0
+ *     SDK's successor (13.4.0) defaults to. gemini-3.8-flash 500s
+ *     ("high demand") and 429s on this free-tier project, so it is NOT
+ *     used as the cloud model for now. NOTE: when an InferenceMode is
+ *     set, the SDK ignores a top-level `model` and uses
+ *     `inCloudParams.model` instead — app.js passes it explicitly.
+ *   - Deep analysis: also gemini-3.5-flash-lite for now.
+ *     gemini-3.1-pro-preview 429s (paid-only preview, no Spark quota).
  * NEVER use gemini-2.5-* : Google limited 2.5 to past users on
  * 18 Sep 2026 and routes 2.5-pro -> 3.8-flash / 2.5-flash ->
- * 3.5-flash-lite from 1 Dec 2026. */
+ * 3.5-flash-lite from 1 Dec 2026. NEVER use gemini-2.0-flash-lite:
+ * retired — the 12.5.0 SDK silently substituted it as the default
+ * cloud model and every AI call 404'd on it (fixed 2026-11-18 by
+ * passing inCloudParams explicitly). */
 window.NOTA_CLOUD_MODELS = {
   flash: "gemini-3.8-flash",
   flashLite: "gemini-3.5-flash-lite",

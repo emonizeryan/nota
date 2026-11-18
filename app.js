@@ -54,6 +54,20 @@ const I18N = {
     actReply: "Draft a reply",
     actDeep: "Deep analysis",
     deepNote: "uses the internet",
+    groupStudy: "Study",
+    actFlashcards: "Flashcards",
+    titleFlashcards: "Flashcards",
+    fcPrev: "← Previous",
+    fcNext: "Next →",
+    fcShuffle: "Shuffle",
+    fcKnown: "Know ✓",
+    fcUnknown: "Not yet ✗",
+    fcProgress: "{known} of {total} known",
+    fcTap: "Tap the card to flip it",
+    fcCardOf: "Card {i} of {n}",
+    fcQuestion: "Question",
+    fcAnswer: "Answer",
+    fcEmpty: "This note is too short for flashcards — write a bit more first.",
     resultTitle: "Result",
     chipDevice: "📱 On this device",
     chipCloud: "☁️ In the cloud",
@@ -145,6 +159,20 @@ const I18N = {
     actReply: "Buatkan balasan",
     actDeep: "Analisis mendalam",
     deepNote: "pakai internet",
+    groupStudy: "Belajar",
+    actFlashcards: "Kartu belajar",
+    titleFlashcards: "Kartu belajar",
+    fcPrev: "← Sebelumnya",
+    fcNext: "Berikutnya →",
+    fcShuffle: "Acak",
+    fcKnown: "Tahu ✓",
+    fcUnknown: "Belum ✗",
+    fcProgress: "{known} dari {total} sudah hafal",
+    fcTap: "Ketuk kartu untuk membaliknya",
+    fcCardOf: "Kartu {i} dari {n}",
+    fcQuestion: "Pertanyaan",
+    fcAnswer: "Jawaban",
+    fcEmpty: "Catatannya terlalu pendek buat kartu belajar — tulis sedikit lagi dulu.",
     resultTitle: "Hasilnya",
     chipDevice: "📱 Di HP ini",
     chipCloud: "☁️ Di cloud",
@@ -360,6 +388,8 @@ function renderEditor() {
   $("note-body").value = n.body;
   updateMeta();
   hideResult();
+  // Reopening a note shows its saved flashcard deck again.
+  maybeShowDeckForActive();
 }
 function setActive(id) {
   activeId = id;
@@ -398,13 +428,15 @@ function applyLang(next) {
   updateMeta();
   // Re-label the visible result (its body stays as generated).
   if (!$("ai-result").hidden && lastResultCtx) {
-    $("ai-result-title").textContent = ACTION_TITLES[lastResultCtx.action] || t("resultTitle");
+    $("ai-result-title").textContent = actionTitle(lastResultCtx.action);
     const chip = $("ai-result-chip");
     const map = { device: [t("chipDevice"), "chip-device"], cloud: [t("chipCloud"), "chip-cloud"], demo: [t("chipDemo"), "chip-demo"], failed: [t("chipFailed"), "chip-demo"] };
     const c = map[lastResultCtx.source] || map.demo;
     chip.textContent = c[0];
     chip.className = "chip " + c[1];
     $("ai-result-note").textContent = lastResultCtx.note || "";
+    // A flashcard deck re-renders its controls in the new language.
+    if (lastResultKind === "flashcards" && currentDeck) renderDeck();
   }
   maybeShowHint();
 }
@@ -438,6 +470,7 @@ const PROMPTS = {
   proofread: (text) => langLine() + `Proofread the following note. Fix grammar, spelling and punctuation only — do not change the meaning, tone or facts. Reply with the corrected text only.\n\nNOTE:\n${text}`,
   reply: (text) => langLine() + `Draft a short, polite reply to the following note or message. Keep it warm and to the point. Reply with the draft only.\n\nNOTE:\n${text}`,
   deep: (text) => langLine() + `Analyse the following note in depth. Cover: (1) what it is really about, (2) what is missing or unclear, (3) risks or contradictions, (4) concrete next steps. Reply in clear sections with short paragraphs.\n\nNOTE:\n${text}`,
+  flashcards: (text) => langLine() + `Make 5 to 8 study flashcards from the following note. Each card asks one question that tests understanding of a fact in the note (not a question that just repeats the text), and the answer is short: one or two sentences. Reply with JSON only, no other text: {"cards": [{"q": "...", "a": "..."}, ...]}\n\nNOTE:\n${text}`,
 };
 const ACTION_TITLES = {
   summarize: () => t("titleSummarize"),
@@ -450,12 +483,13 @@ const ACTION_TITLES = {
   proofread: () => t("titleProofread"),
   reply: () => t("titleReply"),
   deep: () => t("titleDeep"),
+  flashcards: () => t("titleFlashcards"),
 };
 function actionTitle(action) {
   const fn = ACTION_TITLES[action];
   return fn ? fn() : t("resultTitle");
 }
-const JSON_ACTIONS = new Set(["summarize", "keypoints", "actions", "tags"]);
+const JSON_ACTIONS = new Set(["summarize", "keypoints", "actions", "tags", "flashcards"]);
 
 /* ---------------- local demo engine (no Firebase) ----------------
  * Small extractive algorithm, runs entirely in the browser.
@@ -516,12 +550,40 @@ function demoRewrite(text, kind) {
   }
   return text;
 }
+function demoFlashcards(text) {
+  // Honest fallback: cloze-deletion cards. Take the most informative
+  // sentences, blank out a content word inside the sentence, and ask the
+  // reader to fill it in. No fake "AI" wording — the chip still says Demo.
+  // Skip short/header-like lines ("Hadir: Maya, Rizky, Dara.") and never
+  // blank the sentence's first word (usually a label or a name).
+  const a = demoAnalyze(text);
+  const seen = new Set();
+  const candidates = [];
+  [...a.keyPoints, ...splitSentences(text).map((s) => s.trim())].forEach((s) => {
+    if (s && s.length > 30 && !seen.has(s)) { seen.add(s); candidates.push(s); }
+  });
+  const cards = [];
+  for (const s of candidates) {
+    if (cards.length >= 8) break;
+    const content = [...s.matchAll(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\-']{2,}/g)]
+      .filter((m) => m.index > 0 && !STOPWORDS.has(m[0].toLowerCase()))
+      .map((m) => m[0]);
+    if (content.length < 3) continue;
+    const blank = content.reduce((best, w) => (w.length > best.length ? w : best), "");
+    if (blank.length < 3) continue;
+    const q = s.replace(new RegExp(blank.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "______");
+    if (q === s) continue;
+    cards.push({ q, a: `${blank} — ${s}` });
+  }
+  return cards;
+}
 function runDemo(action, text) {
   const a = demoAnalyze(text);
   if (action === "summarize") return { kind: "json", data: a };
   if (action === "keypoints") return { kind: "json", data: { keyPoints: a.keyPoints } };
   if (action === "actions") return { kind: "json", data: { actionItems: a.actionItems } };
   if (action === "tags") return { kind: "json", data: { tags: a.tags } };
+  if (action === "flashcards") return { kind: "flashcards", data: { cards: demoFlashcards(text) } };
   return { kind: "text", data: demoRewrite(text, action) };
 }
 
@@ -539,9 +601,11 @@ function showResult(title, chipText, chipClass, bodyHtml, note, plainText, kind,
   lastResultKind = kind || "text";
   lastResultCtx = ctx || null;
   if (lastResultCtx) lastResultCtx.note = note || "";
+  // "Replace note with this" makes no sense for a flashcard deck.
+  $("btn-apply-result").style.display = lastResultKind === "flashcards" ? "none" : "";
   box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
-function hideResult() { $("ai-result").hidden = true; lastResultCtx = null; }
+function hideResult() { $("ai-result").hidden = true; lastResultCtx = null; currentDeck = null; }
 function jsonToHtml(data) {
   let html = "";
   if (data.tldr) html += `<p><strong>TL;DR:</strong> ${esc(data.tldr)}</p>`;
@@ -571,6 +635,134 @@ function extractJson(text) {
   const end = text.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) return null;
   try { return JSON.parse(text.slice(start, end + 1)); } catch (e) { return null; }
+}
+
+/* ---------------- flashcards deck ----------------
+ * A deck belongs to one note: cards + known marks persist in
+ * localStorage under nota.flashcards.<noteId>, keyed by a signature
+ * of the note text — edit the note and the deck regenerates. */
+const LS_FLASH_PREFIX = "nota.flashcards.";
+let currentDeck = null; // {noteId, text, cards, order, pos, flipped, known:Set, source, note}
+function deckSig(text) {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) >>> 0;
+  return text.length + ":" + h;
+}
+function loadStoredDeck(noteId, text) {
+  try {
+    const raw = localStorage.getItem(LS_FLASH_PREFIX + noteId);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.cards) || d.cards.length === 0) return null;
+    if (d.sig !== deckSig(text)) return null; // note changed — regenerate
+    return { noteId, cards: d.cards, known: new Set(d.known || []), source: d.source || "demo", note: d.note || t("noteDemo") };
+  } catch (e) { return null; }
+}
+function saveStoredDeck(deck) {
+  try {
+    localStorage.setItem(LS_FLASH_PREFIX + deck.noteId, JSON.stringify({
+      cards: deck.cards, known: [...deck.known], sig: deckSig(deck.text), source: deck.source, note: deck.note,
+    }));
+  } catch (e) { /* storage unavailable — deck lives in memory only */ }
+}
+function normalizeCards(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((c) => c && typeof c.q === "string" && typeof c.a === "string" && c.q.trim() && c.a.trim())
+    .slice(0, 8).map((c) => ({ q: c.q.trim(), a: c.a.trim() }));
+}
+function deckPlainText(deck) {
+  return deck.cards.map((c, i) => `Q${i + 1}: ${c.q}\nA${i + 1}: ${c.a}`).join("\n\n");
+}
+function renderFlashcards(cards, source, noteText, storedKnown) {
+  const note = activeNote();
+  const clean = normalizeCards(cards);
+  if (clean.length === 0) {
+    showResult(actionTitle("flashcards"), t("chipDemo"), "chip-demo",
+      `<p><em>${esc(t("fcEmpty"))}</em></p>`, "", "", "text", { action: "flashcards", source: "demo" });
+    return;
+  }
+  currentDeck = {
+    noteId: note ? note.id : "",
+    text: ($("note-body").value || "").trim(),
+    cards: clean,
+    order: clean.map((_, i) => i),
+    pos: 0,
+    flipped: false,
+    known: storedKnown instanceof Set ? storedKnown : new Set(),
+    source,
+    note: noteText,
+  };
+  saveStoredDeck(currentDeck);
+  const chip = source === "device" ? [t("chipDevice"), "chip-device"]
+    : source === "cloud" ? [t("chipCloud"), "chip-cloud"] : [t("chipDemo"), "chip-demo"];
+  showResult(actionTitle("flashcards"), chip[0], chip[1], "", noteText, deckPlainText(currentDeck), "flashcards", { action: "flashcards", source });
+  renderDeck();
+}
+function renderDeck() {
+  const deck = currentDeck;
+  if (!deck || $("ai-result").hidden) return;
+  const id = deck.order[deck.pos];
+  const card = deck.cards[id];
+  const total = deck.cards.length;
+  $("ai-result-body").innerHTML = `
+    <div class="fc-wrap">
+      <div class="fc-card${deck.flipped ? " flipped" : ""}" id="fc-card" role="button" tabindex="0" aria-label="${esc(t("fcTap"))}">
+        <div class="fc-card-inner">
+          <div class="fc-face fc-front"><span class="fc-label">${esc(t("fcQuestion"))}</span><p>${esc(card.q)}</p></div>
+          <div class="fc-face fc-back"><span class="fc-label">${esc(t("fcAnswer"))}</span><p>${esc(card.a)}</p></div>
+        </div>
+      </div>
+      <p class="fc-hint">${esc(t("fcTap"))}</p>
+      <p class="fc-count">${esc(t("fcCardOf").replace("{i}", deck.pos + 1).replace("{n}", total))}</p>
+      <div class="fc-controls">
+        <button class="btn" data-fc="prev" type="button">${esc(t("fcPrev"))}</button>
+        <button class="btn" data-fc="next" type="button">${esc(t("fcNext"))}</button>
+        <button class="btn" data-fc="shuffle" type="button">${esc(t("fcShuffle"))}</button>
+        <button class="btn${deck.known.has(id) ? " fc-known-on" : ""}" data-fc="known" type="button">${esc(t("fcKnown"))}</button>
+        <button class="btn" data-fc="unknown" type="button">${esc(t("fcUnknown"))}</button>
+      </div>
+      <p class="fc-progress">${esc(t("fcProgress").replace("{known}", deck.known.size).replace("{total}", total))}</p>
+    </div>`;
+  $("fc-card").addEventListener("click", () => {
+    deck.flipped = !deck.flipped;
+    $("fc-card").classList.toggle("flipped", deck.flipped);
+  });
+  $("ai-result-body").querySelectorAll("[data-fc]").forEach((b) => {
+    b.addEventListener("click", () => fcControl(b.dataset.fc));
+  });
+}
+function fcControl(which) {
+  const deck = currentDeck;
+  if (!deck) return;
+  const n = deck.cards.length;
+  if (which === "prev") { deck.pos = (deck.pos - 1 + n) % n; deck.flipped = false; }
+  else if (which === "next") { deck.pos = (deck.pos + 1) % n; deck.flipped = false; }
+  else if (which === "shuffle") {
+    for (let i = deck.order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck.order[i], deck.order[j]] = [deck.order[j], deck.order[i]];
+    }
+    deck.pos = 0; deck.flipped = false;
+  } else if (which === "known") {
+    deck.known.add(deck.order[deck.pos]);
+    saveStoredDeck(deck);
+    if (deck.pos < n - 1) deck.pos += 1;
+    deck.flipped = false;
+  } else if (which === "unknown") {
+    deck.known.delete(deck.order[deck.pos]);
+    saveStoredDeck(deck);
+    if (deck.pos < n - 1) deck.pos += 1;
+    deck.flipped = false;
+  }
+  renderDeck();
+}
+function maybeShowDeckForActive() {
+  const note = activeNote();
+  if (!note) return;
+  const text = ($("note-body").value || "").trim();
+  if (!text) return;
+  const stored = loadStoredDeck(note.id, text);
+  if (stored) renderFlashcards(stored.cards, stored.source, stored.note, stored.known);
 }
 
 /* ---------------- Firebase AI Logic (real path) ---------------- */
@@ -614,10 +806,19 @@ async function initFirebase() {
     }
     ai = fb.getAI(app, { backend: new fb.GoogleAIBackend() });
     const models = window.NOTA_CLOUD_MODELS || {};
-    const flash = models.flash || "gemini-3.8-flash";
-    hybridModel = fb.getGenerativeModel(ai, { model: flash, mode: fb.InferenceMode.PREFER_ON_DEVICE });
-    cloudModel = fb.getGenerativeModel(ai, { model: flash, mode: fb.InferenceMode.PREFER_IN_CLOUD });
-    proModel = fb.getGenerativeModel(ai, { model: models.pro || "gemini-3.1-pro-preview", mode: fb.InferenceMode.ONLY_IN_CLOUD });
+    // THE cloud model that actually gets called. When `mode` is set, the
+    // SDK IGNORES the top-level `model` and uses `inCloudParams.model`,
+    // defaulting to RETIRED gemini-2.0-flash-lite (404) if omitted —
+    // Firebase AI SDK 12.5.0 getGenerativeModel source, proven live
+    // 2026-11-18 (every InferenceMode path 404'd on 2.0-flash-lite).
+    // Always pass inCloudParams explicitly. gemini-3.5-flash-lite is the
+    // model proven live by probe: 3.8-flash 500s/429s on this free-tier
+    // project, and 3.1-pro-preview 429s (paid-only preview, no Spark
+    // quota), so Deep also uses flash-lite for now.
+    const cloud = models.flashLite || "gemini-3.5-flash-lite";
+    hybridModel = fb.getGenerativeModel(ai, { mode: fb.InferenceMode.PREFER_ON_DEVICE, inCloudParams: { model: cloud } });
+    cloudModel = fb.getGenerativeModel(ai, { mode: fb.InferenceMode.PREFER_IN_CLOUD, inCloudParams: { model: cloud } });
+    proModel = fb.getGenerativeModel(ai, { mode: fb.InferenceMode.ONLY_IN_CLOUD, inCloudParams: { model: cloud } });
     firebaseReady = true;
     setDot();
     setStatus(t("stReadyEnable"), t("stReadyEnableDetail"));
@@ -725,6 +926,16 @@ async function runAction(action) {
   const tokens = estimateTokens(text);
   const isLong = tokens > (window.NOTA_LONG_DOC_TOKENS || 3500);
   const deep = action === "deep";
+  // A saved deck for this exact note text opens instantly — no new AI call.
+  if (action === "flashcards") {
+    const stored = loadStoredDeck(note.id, text);
+    if (stored) {
+      $("more-panel").hidden = true;
+      $("btn-more").setAttribute("aria-expanded", "false");
+      renderFlashcards(stored.cards, stored.source, stored.note, stored.known);
+      return;
+    }
+  }
   const buttons = document.querySelectorAll("[data-action]");
   buttons.forEach((b) => { b.disabled = true; });
   showResult(actionTitle(action), "…", "", `<p><em>${esc(t("thinking"))}</em></p>`, "", "", "text", { action, source: "demo" });
@@ -738,7 +949,9 @@ async function runAction(action) {
       await new Promise((r) => setTimeout(r, 350)); // let the UI paint
       const out = runDemo(action, text);
       const noteTxt = t("noteDemo");
-      if (out.kind === "json") {
+      if (out.kind === "flashcards") {
+        renderFlashcards(out.data.cards, "demo", noteTxt);
+      } else if (out.kind === "json") {
         showResult(actionTitle(action), t("chipDemo"), "chip-demo", jsonToHtml(out.data), noteTxt, jsonToPlain(out.data), "json", { action, source: "demo" });
       } else {
         showResult(actionTitle(action), t("chipDemo"), "chip-demo", `<p>${esc(out.data)}</p>`, noteTxt, out.data, "text", { action, source: "demo" });
@@ -761,9 +974,12 @@ async function runAction(action) {
       routeNote = t("routeDeep");
       routeKey = "cloud";
     } else if (deviceOnly) {
+      // ONLY_ON_DEVICE never calls the cloud, but pass inCloudParams
+      // anyway: the SDK defaults an omitted one to retired
+      // gemini-2.0-flash-lite (see initFirebase note above).
       model = fb.getGenerativeModel(ai, {
-        model: (window.NOTA_CLOUD_MODELS || {}).flash || "gemini-3.8-flash",
         mode: fb.InferenceMode.ONLY_ON_DEVICE,
+        inCloudParams: { model: (window.NOTA_CLOUD_MODELS || {}).flashLite || "gemini-3.5-flash-lite" },
       });
       routeNote = t("routeDeviceOnly");
       routeKey = "device";
@@ -781,31 +997,57 @@ async function runAction(action) {
     let result;
     if (JSON_ACTIONS.has(action) && !deep) {
       // Structured JSON output (supported on-device and in the cloud).
+      // The schema is per-action; if the SDK rejects it, the JSON-only
+      // prompt still works — never let the schema break the call.
       const genConfig = { responseMimeType: "application/json" };
       if (fb.Schema) {
-        genConfig.responseSchema = fb.Schema.object({
-          properties: {
-            tldr: fb.Schema.string(),
-            keyPoints: fb.Schema.array({ items: fb.Schema.string() }),
-            actionItems: fb.Schema.array({ items: fb.Schema.string() }),
-            tags: fb.Schema.array({ items: fb.Schema.string() }),
-          },
-        });
+        try {
+          genConfig.responseSchema = action === "flashcards"
+            ? fb.Schema.object({
+              properties: {
+                cards: fb.Schema.array({
+                  items: fb.Schema.object({
+                    properties: { q: fb.Schema.string(), a: fb.Schema.string() },
+                  }),
+                }),
+              },
+            })
+            : fb.Schema.object({
+              properties: {
+                tldr: fb.Schema.string(),
+                keyPoints: fb.Schema.array({ items: fb.Schema.string() }),
+                actionItems: fb.Schema.array({ items: fb.Schema.string() }),
+                tags: fb.Schema.array({ items: fb.Schema.string() }),
+              },
+            });
+        } catch (e) { /* schema is a bonus only */ }
       }
       result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: genConfig });
     } else {
       result = await model.generateContent(prompt);
     }
     const response = result.response;
-    const source = response.inferenceSource; // 'ON_DEVICE' | 'IN_CLOUD' | undefined
+    // NOTE: the SDK returns lowercase "on_device" / "in_cloud", not the
+    // "ON_DEVICE" / "IN_CLOUD" the docs show (InferenceSource enum in
+    // the SDK source) — compare case-insensitively, or a real Nano
+    // answer would be mislabelled as cloud.
+    const source = response.inferenceSource;
     const raw = response.text();
-    const onDevice = source === "ON_DEVICE";
+    const onDevice = String(source || "").toUpperCase() === "ON_DEVICE";
     const chip = onDevice ? [t("chipDevice"), "chip-device"] : [t("chipCloud"), "chip-cloud"];
     const srcNote = onDevice
       ? t("noteDevice")
       : (routeNote || t("noteCloud"));
 
-    if (JSON_ACTIONS.has(action) && !deep) {
+    if (action === "flashcards") {
+      const data = extractJson(raw);
+      const cards = data ? normalizeCards(data.cards) : [];
+      if (cards.length) {
+        renderFlashcards(cards, onDevice ? "device" : "cloud", srcNote);
+      } else {
+        showResult(actionTitle(action), chip[0], chip[1], `<p><em>${esc(t("fcEmpty"))}</em></p>`, srcNote, "", "text", { action, source: onDevice ? "device" : "cloud" });
+      }
+    } else if (JSON_ACTIONS.has(action) && !deep) {
       const data = extractJson(raw);
       if (data) {
         showResult(actionTitle(action), chip[0], chip[1], jsonToHtml(data), srcNote, jsonToPlain(data), "json", { action, source: onDevice ? "device" : "cloud" });
@@ -816,11 +1058,23 @@ async function runAction(action) {
       showResult(actionTitle(action), chip[0], chip[1], `<p>${esc(raw)}</p>`, deep ? routeNote : srcNote, raw, "text", { action, source: onDevice ? "device" : "cloud" });
     }
   } catch (e) {
-    const msg = e && e.message ? e.message : String(e);
-    console.error("Nota: AI action failed:", e);
-    showResult(actionTitle(action), t("chipFailed"), "chip-demo",
-      `<p><em>${esc(t("failedBody"))}</em></p>`,
-      "", "", "text", { action, source: "failed" });
+    console.error("Nota: AI action failed, falling back to demo:", e);
+    // Safety net: a failed real-AI call must never dead-end on "Gagal".
+    // Show the local demo result instead, clearly labelled Demo.
+    try {
+      const out = runDemo(action, text);
+      const noteTxt = t("noteDemo");
+      if (out.kind === "json") {
+        showResult(actionTitle(action), t("chipDemo"), "chip-demo", jsonToHtml(out.data), noteTxt, jsonToPlain(out.data), "json", { action, source: "demo" });
+      } else {
+        showResult(actionTitle(action), t("chipDemo"), "chip-demo", `<p>${esc(out.data)}</p>`, noteTxt, out.data, "text", { action, source: "demo" });
+      }
+    } catch (e2) {
+      console.error("Nota: demo fallback also failed:", e2);
+      showResult(actionTitle(action), t("chipFailed"), "chip-demo",
+        `<p><em>${esc(t("failedBody"))}</em></p>`,
+        "", "", "text", { action, source: "failed" });
+    }
   } finally {
     buttons.forEach((b) => { b.disabled = false; });
   }

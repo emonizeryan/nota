@@ -389,3 +389,42 @@ input, textarea, select { font: inherit; color: inherit; }
 @media (max-width: 760px) {
   .status-panel { margin: 12px 12px 0; }
 }
+
+/* ---------- Flashcards (v5): study deck in the result area ---------- */
+.fc-wrap { display: grid; gap: 10px; }
+.fc-card { cursor: pointer; perspective: 900px; }
+.fc-card-inner {
+  position: relative;
+  min-height: 150px;
+  transition: transform 0.35s ease;
+  transform-style: preserve-3d;
+}
+.fc-card.flipped .fc-card-inner { transform: rotateY(180deg); }
+.fc-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  overflow-y: auto;
+}
+.fc-face.fc-back { transform: rotateY(180deg); background: var(--accent-soft); border-color: #bcd4c7; }
+.fc-face p { margin: 8px 0 0; font-size: 16px; }
+.fc-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ink-soft);
+}
+.fc-hint { margin: 0; font-size: 13px; color: var(--ink-soft); text-align: center; }
+.fc-count { margin: 0; font-size: 13px; color: var(--ink-soft); text-align: center; }
+.fc-controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.fc-progress { margin: 0; font-size: 14px; font-weight: 650; text-align: center; }
+.fc-known-on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+@media (max-width: 760px) {
+  .fc-card-inner { min-height: 170px; }
+}

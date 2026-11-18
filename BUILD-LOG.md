@@ -157,3 +157,47 @@ README "Live demo" line updated to https://emonizeryan.github.io/nota/.
 - Real on-device Nano run (needs a real desktop Chrome; VM cannot download the model).
 - Push v4 to GitHub (parent handles it) + verify Pages.
 - Demo video (user records on his phone later) and Devpost submission.
+
+## v5 — Flashcards for studying (2026-11-18 ~22:00 WIB, user-picked)
+User picked "Flashcard belajar dari catatan" from the feature options. One new
+action, "Flashcards" / "Kartu belajar", in a new "Study" / "Belajar" group
+inside "Lainnya ▾" — nothing new on the first screen.
+
+1. Same hybrid routing as the other actions (short note → on-device,
+   long note → cloud, deep never default); `flashcards` added to
+   `JSON_ACTIONS`, prompt asks for 5–8 Q&A cards as
+   `{"cards": [{"q", "a"}]}` in the UI language.
+2. The JSON response schema is now per-action (cards schema for
+   flashcards, summary schema for the rest). Schema building is wrapped
+   in try/catch — if the SDK rejects it, the JSON-only prompt still
+   works; the schema must never break the call.
+3. Study view renders in the result card: tap the card to flip
+   (3D flip, question front / answer back), Previous / Next / Shuffle,
+   "Know ✓" / "Not yet ✗" with a progress line ("3 of 8 known").
+   Marking a card advances to the next one.
+4. Decks persist per note in `localStorage` (`nota.flashcards.<noteId>`:
+   cards + known marks + a signature of the note text). Tapping
+   Flashcards on an unchanged note reopens its saved deck instantly;
+   editing the note regenerates it. Reopening a note shows its deck.
+5. All labels in the i18n table (ID + EN); "Replace note with this"
+   is hidden for flashcard results; Copy copies the deck as Q/A text.
+6. Demo mode: cloze-deletion cards (blank the longest content word
+   of the most informative sentences) — honest fallback, chip "Demo".
+7. Bug fixed along the way: `applyLang` assigned the `ACTION_TITLES`
+   function itself to the result title instead of calling it, so
+   switching language with a visible result showed function source as
+   the title. It now uses `actionTitle(...)`, and a visible deck
+   re-renders its controls in the new language.
+
+### v5 verification (headless Chrome 156, 2026-11-18, local demo mode)
+- Screenshots: shots/desktop-1280-v5-more.png, shots/desktop-1280-v5-id.png, shots/desktop-1280-v5-flipped.png, shots/mobile-390-v5-more.png, shots/mobile-390-v5-id.png, shots/mobile-390-v5-flipped.png, shots/desktop-selftest-v5.png — deck + flipped card confirmed visually (see below).
+- CDP clicks: "Lainnya ▾" opens 5 groups incl. "Belajar" with "Kartu belajar"; tap generates a 4-card demo deck from the "Rapat tim" seed note (chip Demo, first card blanks "feedback"); tap card flips to the answer; "Tahu ✓" → "1 dari 4 sudah hafal" and advances; Berikutnya/Acak work; reload reopens the deck with progress kept; ID→EN switch re-labels the deck ("1 of 4 known", title "Flashcards"); ?selftest=1 still runs (chip=Demo).
+- Banned jargon: 0 hits in rendered innerText. `node --check` clean. No gemini-2.5 anywhere.
+- Two real bugs found by render and fixed: (a) `.fc-face.back` never matched (element class is `fc-back`), so the flipped answer face was invisible — fixed to `.fc-face.fc-back`; (b) the stored-deck shortcut returned before closing the "More" panel — fixed to close it. A third fix from the same run: demo cloze skipped header-like lines and never blanks the first word (the first version produced "______: Maya, Rizky, Dara.").
+- Console errors: only the known environmental "Firebase init failed: Failed to fetch dynamically imported module (gstatic)" — no egress proxy in this run, so Firebase never loads and the app degrades to demo mode, exactly as in v4. No errors from the new code.
+- NOT verified: the real-AI flashcards path (JSON schema + model call). The live cloud-AI test fails for ALL actions right now (Firebase AI SDK 12.5.0 substitutes retired gemini-2.0-flash-lite → 404; parent is probing a fix separately). Re-test flashcards against the real model after that fix lands.
+
+## v5.1 — Cloud AI fix: inCloudParams + demo fallback (2026-11-18 ~22:16 WIB)
+Live cloud test FAILED 22:01: every AI action ended "Gagal". Root cause proven from SDK source + live repro: Firebase AI SDK 12.5.0 `getGenerativeModel` IGNORES top-level `model` when `mode` is set and uses `inCloudParams || {model: "gemini-2.0-flash-lite"}` — the app never passed inCloudParams, so all InferenceMode paths 404'd on retired gemini-2.0-flash-lite. App Check was not the problem.
+Fix (FIX.patch, 5 hunks, verified in a copy first): all three models + the device-only branch now pass `inCloudParams: { model: gemini-3.5-flash-lite }` explicitly. gemini-3.8-flash 500s/429s on this free-tier project and gemini-3.1-pro-preview 429s (paid-only), so Deep also uses flash-lite for now. Secondary fix: `response.inferenceSource` is lowercase "on_device"/"in_cloud" — comparison is now case-insensitive, or a real Nano answer would be mislabelled cloud. Safety net: a failed real-AI call now falls back to the local demo result labelled "Demo" instead of "Gagal".
+Copy verification (CDP, real AppCheck): short Ringkas chip "☁️ Di cloud" with real Indonesian summary; long doc "Di cloud"; Deep "Di cloud" (2,852 chars); selftest passes; 6× HTTP 200 to gemini-3.5-flash-lite:generateContent; 0 console errors. Forced failure (bogus model) → chip "Demo", no "Gagal" anywhere. Full report: buildhybridai-notes-fixprobe/FIX-REPORT.md.
