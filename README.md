@@ -6,7 +6,7 @@ offline-first notes / reading summariser & rewriter. Short tasks run
 Logic** hybrid inference; long documents go to **Gemini Flash** in the
 cloud; **Gemini Pro** runs only when you press “Deep analysis”.
 
-- **Live demo:** _(add the GitHub Pages URL after publishing — see Deploy)_
+- **Live demo:** https://emonizeryan.github.io/nota/
 - **License:** Apache 2.0 (see `LICENSE`)
 - **No account needed. No tracking. Notes live only in your browser.**
 

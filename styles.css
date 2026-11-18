@@ -20,6 +20,15 @@
 
 * { box-sizing: border-box; }
 
+/* [hidden] must always win over component display rules (e.g. the
+   "More" panel's display:grid) or panels meant to start closed show up open. */
+[hidden] { display: none !important; }
+
+/* Desktop grid placement: the DOM is editor-first (mobile-first order),
+   so pin the sidebar to the left column explicitly on desktop. */
+.layout .sidebar { grid-column: 1; grid-row: 1; }
+.layout .editor { grid-column: 2; grid-row: 1; }
+
 html { font-size: 16px; }
 
 body {
@@ -259,7 +268,10 @@ input, textarea, select { font: inherit; color: inherit; }
 
 /* ---------- Mobile ---------- */
 @media (max-width: 760px) {
-  .layout { grid-template-columns: 1fr; padding: 12px; }
+  .layout { display: flex; flex-direction: column; padding: 12px; }
+  .layout .editor { order: 1; }
+  .layout .sidebar { order: 2; }
+  .tagline { display: none; }
   .ai-status { margin: 12px 12px 0; }
   .topbar { padding: 12px; }
   .sidebar { position: static; }
@@ -267,4 +279,113 @@ input, textarea, select { font: inherit; color: inherit; }
   .editor { padding: 14px; }
   #note-title { font-size: 21px; }
   .brand h1 { font-size: 24px; }
+}
+
+/* ---------- Simplified UI (v4): status dot, language toggle, one main button ---------- */
+.status-dot {
+  background: var(--demo-soft);
+  border: 1px solid #e5cf96;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.status-dot.ok { background: var(--accent-soft); border-color: #bcd4c7; }
+.status-dot.warn { background: var(--demo-soft); border-color: #e5cf96; }
+
+.lang-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.lang-toggle button {
+  border: none;
+  background: transparent;
+  padding: 5px 11px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-soft);
+}
+.lang-toggle button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.status-panel {
+  margin: 12px 20px 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.status-panel strong { font-size: 14.5px; }
+
+.first-run {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--accent-soft);
+  border: 1px solid #bcd4c7;
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.editor-head { display: flex; gap: 4px; align-items: flex-start; position: relative; }
+.editor-head #note-title { flex: 1; min-width: 0; }
+.note-menu {
+  position: absolute;
+  top: 44px; right: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+  z-index: 5;
+}
+.note-menu .btn { display: block; width: 100%; text-align: left; border-radius: 8px; }
+
+.btn-main {
+  display: block;
+  width: 100%;
+  padding: 13px 18px;
+  font-size: 16px;
+  margin-top: 14px;
+}
+.btn-more {
+  display: block;
+  margin: 10px auto 0;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 6px 12px;
+  font-size: 14px;
+}
+.btn-more:hover { color: var(--accent); }
+.more-panel {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 12px 14px;
+  display: grid;
+  gap: 12px;
+}
+.more-group h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-soft);
+}
+.more-group .btn { margin: 0 6px 6px 0; }
+.more-group .hint { display: block; margin-top: 2px; }
+
+@media (max-width: 760px) {
+  .status-panel { margin: 12px 12px 0; }
 }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nota — private notes that think on your device</title>
-<meta name="description" content="Nota is a private, offline-first notes app. Summaries, rewrites, proofreading and tags run on-device with Gemini Nano via Firebase AI Logic, with Gemini Flash in the cloud only for long documents. Your notes never leave your device unless you ask.">
+<meta name="description" content="Nota is a private, offline-first notes app. Summaries, rewrites, proofreading and tags run on your device first, with the cloud only for long documents. Your notes never leave your device unless you ask.">
 <link rel="stylesheet" href="styles.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%232f5d50'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='%23fdfbf7' font-family='Georgia,serif'%3EN%3C/text%3E%3C/svg%3E">
 <script type="importmap">
@@ -23,71 +23,76 @@
     <span class="logo" aria-hidden="true">N</span>
     <div>
       <h1>Nota</h1>
-      <p class="tagline">Private notes that think on your device.</p>
+      <p class="tagline" data-i18n="tagline">Private notes that think on your device.</p>
     </div>
   </div>
-  <div class="top-status" id="top-status" aria-live="polite">
-    <span class="pill" id="net-pill" title="Network status">● online</span>
-    <span class="pill" id="ai-pill" title="AI engine status">AI: checking…</span>
-    <button class="pill" id="btn-ai-reopen" type="button" title="Show the AI status banner again" hidden>AI status</button>
+  <div class="top-status">
+    <button class="status-dot" id="status-dot" type="button" title="AI status">● Demo</button>
+    <div class="lang-toggle" role="group" aria-label="Language / Bahasa">
+      <button type="button" data-lang="id" id="lang-id">ID</button>
+      <button type="button" data-lang="en" id="lang-en" class="active">EN</button>
+    </div>
   </div>
 </header>
 
-<section class="ai-status" id="ai-status" aria-live="polite">
-  <div class="ai-banner">
-    <strong id="ai-status-title">On-device AI: checking…</strong>
-    <button id="btn-ai-details" class="btn" type="button" aria-expanded="false">Details</button>
-    <button id="btn-ai-dismiss" class="btn" type="button" title="Hide this banner">✕</button>
+<div class="status-panel" id="status-panel" hidden>
+  <strong id="ai-status-title">Mode demo</strong>
+  <p class="ai-status-detail" id="ai-status-detail"></p>
+  <div class="progress" id="model-progress" hidden>
+    <div class="progress-bar" id="model-progress-bar" style="width:0%"></div>
   </div>
-  <div class="ai-details" id="ai-details" hidden>
-    <p class="ai-status-detail" id="ai-status-detail">Looking for Gemini Nano on this device.</p>
-    <div class="progress" id="model-progress" hidden>
-      <div class="progress-bar" id="model-progress-bar" style="width:0%"></div>
-    </div>
-    <div class="ai-status-actions">
-      <button id="btn-enable-ai" class="btn btn-primary" type="button">Enable on-device AI</button>
-      <label class="switch-label" title="When on, notes never leave this device: cloud fallback is disabled and long documents will ask you first.">
-        <input type="checkbox" id="toggle-device-only"> Keep my notes on this device
-      </label>
-      <span class="hint">Needs Chrome 139+ on desktop. First run downloads the on-device model (~2–4&nbsp;GB) once.</span>
-    </div>
-    <p class="ai-note" id="firebase-note">Firebase is not configured yet — the app runs in local demo mode. Connect Firebase (5&nbsp;min, see README) to unlock real Gemini Nano + Gemini Flash.</p>
+  <div class="ai-status-actions">
+    <button id="btn-enable-ai" class="btn btn-primary" type="button">Enable AI on this device</button>
+    <label class="switch-label">
+      <input type="checkbox" id="toggle-device-only"> <span data-i18n="deviceOnly">Keep my notes on this device</span>
+    </label>
+    <span class="hint" data-i18n="deviceOnlyHint">When on, no cloud AI is used.</span>
   </div>
-</section>
+</div>
 
 <main class="layout">
-  <aside class="sidebar">
-    <div class="sidebar-head">
-      <h2>Notes</h2>
-      <button id="btn-new" class="btn btn-primary" type="button">+ New note</button>
-    </div>
-    <label class="search-label">Search
-      <input id="search" type="search" placeholder="Search notes…" autocomplete="off">
-    </label>
-    <ul id="note-list" class="note-list" aria-label="Your notes"></ul>
-    <p class="sidebar-foot">Notes are stored only in this browser (localStorage). Nothing is uploaded unless you use a cloud AI action — and then only the text you send.</p>
-  </aside>
-
   <section class="editor" aria-label="Note editor">
-    <input id="note-title" type="text" placeholder="Note title…" aria-label="Note title">
-    <textarea id="note-body" placeholder="Paste an article, an email, meeting notes — anything. Then ask Nota to summarise, rewrite or proofread it." aria-label="Note text" rows="7"></textarea>
+    <div id="first-run" class="first-run" hidden>
+      <span data-i18n="steps">1 Write or paste text · 2 Tap ✦ Summarise · 3 Read the result below</span>
+      <button id="btn-hint-dismiss" class="btn btn-quiet" type="button" title="Hide this hint">✕</button>
+    </div>
+    <div class="editor-head">
+      <input id="note-title" type="text" placeholder="Note title…" aria-label="Note title">
+      <button id="btn-note-menu" class="btn btn-quiet" type="button" aria-label="Note options" aria-expanded="false">⋯</button>
+      <div id="note-menu" class="note-menu" hidden>
+        <button id="btn-delete-note" class="btn btn-quiet" type="button">Delete note</button>
+      </div>
+    </div>
+    <textarea id="note-body" placeholder="Write or paste text here — an article, an email, meeting notes, anything." aria-label="Note text" rows="7"></textarea>
     <div class="editor-meta">
       <span id="word-count">0 words</span>
-      <span id="token-est">~0 tokens</span>
-      <span id="route-hint" class="route-hint"></span>
     </div>
 
-    <div class="actions" role="group" aria-label="AI actions">
-      <button class="btn btn-ai btn-primary" data-action="summarize" type="button">✦ Summarise</button>
-      <button class="btn btn-ai" data-action="keypoints" type="button">Key points</button>
-      <button class="btn btn-ai" data-action="actions" type="button">Action items</button>
-      <button class="btn btn-ai" data-action="tags" type="button">Tags</button>
-      <button class="btn btn-ai" data-action="rewrite-shorter" type="button">Rewrite · shorter</button>
-      <button class="btn btn-ai" data-action="rewrite-formal" type="button">Rewrite · formal</button>
-      <button class="btn btn-ai" data-action="rewrite-simple" type="button">Rewrite · simpler</button>
-      <button class="btn btn-ai" data-action="proofread" type="button">Proofread</button>
-      <button class="btn btn-ai" data-action="reply" type="button">Draft a reply</button>
-      <button class="btn btn-ai btn-deep" data-action="deep" type="button" title="Runs in the cloud on Gemini Pro. You asked for it — never the default.">Deep analysis (cloud Pro) →</button>
+    <button id="btn-summarize" class="btn btn-ai btn-primary btn-main" data-action="summarize" type="button">✦ Summarise this note</button>
+    <button id="btn-more" class="btn btn-more" type="button" aria-expanded="false">More ▾</button>
+    <div id="more-panel" class="more-panel" hidden>
+      <div class="more-group">
+        <h4 data-i18n="groupTidy">Tidy up</h4>
+        <button class="btn btn-ai" data-action="proofread" type="button" data-i18n="actProofread">Proofread</button>
+        <button class="btn btn-ai" data-action="rewrite-shorter" type="button" data-i18n="actShorter">Shorter</button>
+        <button class="btn btn-ai" data-action="rewrite-formal" type="button" data-i18n="actFormal">More formal</button>
+        <button class="btn btn-ai" data-action="rewrite-simple" type="button" data-i18n="actSimpler">Simpler</button>
+      </div>
+      <div class="more-group">
+        <h4 data-i18n="groupFind">Find out</h4>
+        <button class="btn btn-ai" data-action="keypoints" type="button" data-i18n="actKeypoints">Key points</button>
+        <button class="btn btn-ai" data-action="actions" type="button" data-i18n="actActions">Action items</button>
+        <button class="btn btn-ai" data-action="tags" type="button" data-i18n="actTags">Tags</button>
+      </div>
+      <div class="more-group">
+        <h4 data-i18n="groupReply">Reply</h4>
+        <button class="btn btn-ai" data-action="reply" type="button" data-i18n="actReply">Draft a reply</button>
+      </div>
+      <div class="more-group">
+        <h4 data-i18n="groupDeep">Go deeper</h4>
+        <button class="btn btn-ai btn-deep" data-action="deep" type="button" data-i18n="actDeep">Deep analysis</button>
+        <span class="hint" data-i18n="deepNote">uses the internet</span>
+      </div>
     </div>
 
     <div id="ai-result" class="ai-result" hidden>
@@ -97,17 +102,28 @@
       </div>
       <div id="ai-result-body" class="ai-result-body"></div>
       <div class="ai-result-foot">
-        <button id="btn-copy-result" class="btn" type="button">Copy result</button>
-        <button id="btn-apply-result" class="btn" type="button">Replace note with result</button>
+        <button id="btn-copy-result" class="btn" type="button" data-i18n="copyBtn">Copy</button>
+        <button id="btn-apply-result" class="btn" type="button" data-i18n="applyBtn">Replace note with this</button>
         <span id="ai-result-note" class="hint"></span>
       </div>
     </div>
   </section>
+
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <h2 data-i18n="sidebarTitle">My notes</h2>
+      <button id="btn-new" class="btn btn-primary" type="button" data-i18n="newNote">+ New note</button>
+    </div>
+    <label class="search-label"><span data-i18n="searchLabel">Search notes…</span>
+      <input id="search" type="search" placeholder="Search notes…" autocomplete="off">
+    </label>
+    <ul id="note-list" class="note-list" aria-label="Your notes"></ul>
+    <p class="sidebar-foot" data-i18n="sidebarFoot">Stored in this browser only.</p>
+  </aside>
 </main>
 
 <footer class="footer">
-  <p><strong>How the hybrid works:</strong> short tasks run on-device with Gemini Nano (free, private, offline) via Firebase AI Logic in <code>PREFER_ON_DEVICE</code> mode. Documents over ~3,500 tokens go to Gemini Flash in the cloud — always with a visible note. Gemini Pro runs only when you press “Deep analysis”. Every answer carries a chip showing exactly where it ran: <span class="chip chip-device">ON DEVICE</span> or <span class="chip chip-cloud">IN CLOUD</span>.</p>
-  <p>Nota is free, open source (Apache 2.0), built for #BuildHybridAI 2026. <a href="README.md">Setup &amp; how it works</a> · <span id="about-line">No account needed. No tracking.</span></p>
+  <p><span data-i18n="footer">Free, no account. Your notes never leave this device.</span> <a href="README.md" data-i18n="howItWorks">How it works</a></p>
 </footer>
 
 <script src="firebase-config.js"></script>

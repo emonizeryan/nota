@@ -118,3 +118,42 @@ fresh renders (`shots/desktop-1280-v3.png`, `shots/mobile-390-v2.png`,
 ### Design review
 - Violet FIX LIST — all 9 applied + re-verified (see above). No
   second review round requested; v3 renders are the evidence.
+
+## v4 — Simplified UI + ID/EN language menu (2026-11-18 ~21:40–22:00 WIB, user-approved)
+User feedback: "masih bingung pakenya, UI harusnya lebih simple dan friendly" + ID/EN language menu. Applied all 13 items of Violet's UI-SIMPLIFY-PLAN.md:
+1. Top bar: segmented ID | EN toggle (active = green), small status dot (● Siap / ● Demo); "online" + "AI: local demo" pills removed; tagline hidden ≤760px.
+2. AI status banner removed; status now a small popover opened by tapping the dot (friendly copy, no "unavailable" headline).
+3. Mobile-first order: editor (+ main button) → result card → "Catatanku" list. ✦ Ringkas visible on the 390px first screen without scrolling.
+4. One big green full-width primary button ✦ Ringkas / Summarise; other 9 actions behind "Lainnya ▾" in 4 labelled groups (Rapikan / Cari tahu / Balas / Mendalam); panel closes after picking an action.
+5. All copy switched to plan §3 table (ID + EN); no banned jargon in any rendered text (verified: innerText grep = 0 hits for PREFER_ON_DEVICE, InferenceMode, tokens, localStorage, Firebase, Gemini, ON DEVICE, IN CLOUD, App Check, "local demo mode").
+6. Editor meta = word count only ("47 kata" / "47 words").
+7. Result chips now "📱 Di HP ini" / "☁️ Di cloud" / "Demo" + one plain sentence.
+8. Delete moved to a ⋯ menu next to the note title, still with confirmation.
+9. Sidebar foot = one line ("Tersimpan di browser ini saja."); footer = one line + "Cara kerja" link.
+10. Seed notes replaced with two short Indonesian notes ("Rapat tim — 18 Nov", "Belanja mingguan").
+11. First-run 3-step hint ("1 Tulis… · 2 Pencet ✦ Ringkas · 3 Baca hasilnya di bawah"), shown on first visit / empty note, dismissible (persisted).
+12. Language: toggle switches every label + <html lang> + AI answer language (prompt carries "Jawab dalam Bahasa Indonesia" / "Reply in English"); choice persisted in localStorage (nota.lang); initial = browser language (id/en), fallback EN; ?lang=id|en deep-link also works.
+13. Verification from renders (see below).
+
+Two real bugs found by render, not by reading code, and fixed:
+- `.more-panel { display:grid }` overrode the `hidden` attribute, so the "More" panel rendered open on first load. Fixed with a global `[hidden]{display:none!important}` rule.
+- DOM is editor-first (mobile-first), so desktop grid auto-placement put the sidebar on the RIGHT. Fixed with explicit `.layout .sidebar{grid-column:1} .layout .editor{grid-column:2}`.
+
+One deliberate deviation from the plan: its §3 demo note says "Mode demo — sambungkan Firebase untuk AI asli", but §5 bans the word "Firebase" from visible UI. The ban wins: the demo note now reads "Mode demo — ini contoh saja, bukan AI asli." / "Demo mode — this is a sample, not the real AI."
+
+README "Live demo" line updated to https://emonizeryan.github.io/nota/.
+
+### v4 verification (headless Chrome 156, 2026-11-18 ~21:45–22:00 WIB)
+- Screenshots: shots/desktop-1280-v4-en.png, shots/desktop-1280-v4-id.png, shots/mobile-390-v4-en.png, shots/mobile-390-v4-id.png, shots/desktop-selftest-v4.png, shots/desktop-1280-v4-cdp.png — all viewed.
+- (a) ✦ Ringkas visible on the 390px first screen in both languages — CONFIRMED in mobile-390-v4-id.png and mobile-390-v4-en.png.
+- (b) Banned jargon: 0 hits in rendered innerText (CDP check, both languages).
+- (c) Toggle verified by REAL CDP click on #lang-id: lang en→id, main button "✦ Summarise this note"→"✦ Ringkas catatan ini", choice persisted (localStorage nota.lang=id); "More" panel opens with all 4 groups + 9 actions labelled.
+- (d) ?selftest=1 still runs: SELFTEST chip=Demo, TL;DR + Key points + Tags render (EN and ?lang=id runs both probed).
+- (e) Console errors: 0 when Chrome runs through the local egress proxy (Firebase SDK loads, init succeeds — no "Firebase init failed"). Without the proxy, Chrome on this VM cannot reach gstatic at all (ERR_TUNNEL_CONNECTION_FAILED) and the app degrades gracefully to demo mode; that is environmental, not a code error.
+- No gemini-2.5 model ID anywhere in code (only "NEVER use gemini-2.5" comments/docs). `node --check` clean for app.js + firebase-config.js.
+- Hybrid routing, models, Firebase wiring untouched (UI + copy + i18n only).
+
+### Still open (unchanged)
+- Real on-device Nano run (needs a real desktop Chrome; VM cannot download the model).
+- Push v4 to GitHub (parent handles it) + verify Pages.
+- Demo video (user records on his phone later) and Devpost submission.

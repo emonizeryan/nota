@@ -1,11 +1,11 @@
 /* ==================================================================
  * Nota — private, offline-first notes with hybrid AI
  * ------------------------------------------------------------------
- * AI routing (the whole point of this app):
- *   - Short tasks (summarise, proofread, rewrite, tag, reply) run
- *     on-device with Gemini Nano via Firebase AI Logic, mode
- *     PREFER_ON_DEVICE. The SDK falls back to the cloud model only
- *     when Nano is unavailable — and we show which path answered.
+ * AI routing (unchanged by the UI simplification):
+ *   - Short tasks run on-device with Gemini Nano via Firebase AI
+ *     Logic, mode PREFER_ON_DEVICE. The SDK falls back to the cloud
+ *     model only when Nano is unavailable — and we show which path
+ *     answered, in plain words.
  *   - Long documents (> NOTA_LONG_DOC_TOKENS, ~3,500) go straight to
  *     Gemini Flash in the cloud, with a visible note saying so.
  *   - "Deep analysis" runs ONLY in the cloud on Gemini Pro, only
@@ -19,19 +19,229 @@
  * No Firebase project yet? The app still works end to end in
  * LOCAL DEMO mode: a small on-device algorithm does extractive
  * summaries/rewrites so every button can be tried. Demo results are
- * always labelled "LOCAL DEMO" — never shown as Nano or Flash.
+ * always labelled "Demo" — never shown as on-device or cloud AI.
  * ================================================================== */
 
 const $ = (id) => document.getElementById(id);
 const LS_NOTES = "nota.notes.v1";
 const LS_ACTIVE = "nota.active.v1";
 const LS_DEVICE_ONLY = "nota.deviceOnly.v1";
+const LS_LANG = "nota.lang";
+const LS_HINT = "nota.hint";
+
+/* ---------------- language ----------------
+ * UI strings in Bahasa Indonesia + English. AI answers follow the
+ * chosen language too (see PROMPTS: a language line is prepended).
+ * Internal JSON keys stay English; only the values change. */
+const I18N = {
+  en: {
+    tagline: "Private notes that think on your device.",
+    titlePlaceholder: "Note title…",
+    bodyPlaceholder: "Write or paste text here — an article, an email, meeting notes, anything.",
+    summarizeMain: "✦ Summarise this note",
+    more: "More ▾",
+    groupTidy: "Tidy up",
+    groupFind: "Find out",
+    groupReply: "Reply",
+    groupDeep: "Go deeper",
+    actProofread: "Proofread",
+    actShorter: "Shorter",
+    actFormal: "More formal",
+    actSimpler: "Simpler",
+    actKeypoints: "Key points",
+    actActions: "Action items",
+    actTags: "Tags",
+    actReply: "Draft a reply",
+    actDeep: "Deep analysis",
+    deepNote: "uses the internet",
+    resultTitle: "Result",
+    chipDevice: "📱 On this device",
+    chipCloud: "☁️ In the cloud",
+    chipDemo: "Demo",
+    chipFailed: "Failed",
+    noteDevice: "Made on this device — your text never left it.",
+    noteCloudLong: "Made in the cloud because the document is long.",
+    noteCloud: "Made in the cloud.",
+    noteDemo: "Demo mode — this is a sample, not the real AI.",
+    copyBtn: "Copy",
+    applyBtn: "Replace note with this",
+    copied: "Copied ✓",
+    copyFailed: "Copy failed — select the text manually.",
+    sidebarTitle: "My notes",
+    newNote: "+ New note",
+    searchLabel: "Search notes…",
+    sidebarFoot: "Stored in this browser only.",
+    noMatch: "No notes match that search.",
+    untitled: "Untitled note",
+    sample: "sample",
+    emptyEditor: "Write or paste some text first.",
+    thinking: "Thinking…",
+    failedBody: "Something went wrong. Try again.",
+    deleteNote: "Delete note",
+    deleteConfirm: "Delete “{title}”?",
+    deviceOnly: "Keep my notes on this device",
+    deviceOnlyHint: "When on, no cloud AI is used.",
+    statusReady: "● Ready",
+    statusDemo: "● Demo",
+    footer: "Free, no account. Your notes never leave this device.",
+    howItWorks: "How it works",
+    steps: "1 Write or paste text · 2 Tap ✦ Summarise · 3 Read the result below",
+    resultEmpty: "The model returned an empty result.",
+    noActions: "No clear action items found in this note.",
+    lblKeyPoints: "Key points",
+    lblActionItems: "Action items",
+    lblTags: "Tags",
+    enableAI: "Enable AI on this device",
+    enableReady: "AI on this device is ready ✓",
+    enableUnavailable: "AI on this device unavailable",
+    stDemo: "Demo mode",
+    stDemoDetail: "The app runs in demo mode for now. Everything still works.",
+    stFailedDetail: "The real AI failed to load. Nota keeps working in demo mode.",
+    stReadyEnable: "AI is ready to switch on",
+    stReadyEnableDetail: "Tap the button below once to set up AI on this device — or just use it, setup starts by itself.",
+    stReady: "AI on this device is ready",
+    stReadyDetail: "Short tasks run on this device, free and offline.",
+    stDownloading: "Downloading the AI…",
+    stDownloadingDetail: "A one-time download. While waiting, short tasks still run via the internet.",
+    stNoNano: "On-device AI isn't ready here",
+    stNoNanoDetail: "This browser can't run on-device AI yet. Answers still come via the internet or demo. Everything still works.",
+    stNeedSetup: "The real AI needs setup first",
+    stNeedSetupDetail: "See “How it works” at the bottom of the page. Demo mode keeps working for now.",
+    stEnableFailed: "On-device AI couldn't start",
+    stEnableFailedDetail: "Short tasks still run via the internet and are labelled as such.",
+    replyThanks: "Thanks for sharing this. My main takeaways: ",
+    replyActions: "\n\nOn actions — ",
+    replyClose: "\n\nLet me know if you'd like me to take any of this further.",
+    routeDeep: "Deep analysis runs in the cloud — you asked for it. It is never the default.",
+    routeDeviceOnly: "Device-only is on: this ran on-device, or not at all. Nothing left the device.",
+    titleSummarize: "Summary",
+    titleKeypoints: "Key points",
+    titleActions: "Action items",
+    titleTags: "Tags",
+    titleRewriteShorter: "Rewrite — shorter",
+    titleRewriteFormal: "Rewrite — formal",
+    titleRewriteSimple: "Rewrite — simpler",
+    titleProofread: "Proofread",
+    titleReply: "Draft reply",
+    titleDeep: "Deep analysis",
+  },
+  id: {
+    tagline: "Catatan pribadi yang ringkas sendiri.",
+    titlePlaceholder: "Judul catatan…",
+    bodyPlaceholder: "Tulis atau tempel teks di sini — artikel, email, notulen rapat, apa saja.",
+    summarizeMain: "✦ Ringkas catatan ini",
+    more: "Lainnya ▾",
+    groupTidy: "Rapikan",
+    groupFind: "Cari tahu",
+    groupReply: "Balas",
+    groupDeep: "Mendalam",
+    actProofread: "Perbaiki tulisan",
+    actShorter: "Lebih singkat",
+    actFormal: "Lebih formal",
+    actSimpler: "Lebih sederhana",
+    actKeypoints: "Poin penting",
+    actActions: "Yang harus dilakukan",
+    actTags: "Tag",
+    actReply: "Buatkan balasan",
+    actDeep: "Analisis mendalam",
+    deepNote: "pakai internet",
+    resultTitle: "Hasilnya",
+    chipDevice: "📱 Di HP ini",
+    chipCloud: "☁️ Di cloud",
+    chipDemo: "Demo",
+    chipFailed: "Gagal",
+    noteDevice: "Dibuat di HP ini — teksmu tidak keluar ke mana-mana.",
+    noteCloudLong: "Dibuat di cloud karena dokumennya panjang.",
+    noteCloud: "Dibuat di cloud.",
+    noteDemo: "Mode demo — ini contoh saja, bukan AI asli.",
+    copyBtn: "Salin",
+    applyBtn: "Ganti catatan dengan ini",
+    copied: "Tersalin ✓",
+    copyFailed: "Gagal menyalin — pilih teksnya manual saja.",
+    sidebarTitle: "Catatanku",
+    newNote: "+ Catatan baru",
+    searchLabel: "Cari catatan…",
+    sidebarFoot: "Tersimpan di browser ini saja.",
+    noMatch: "Belum ada catatan yang cocok.",
+    untitled: "Catatan tanpa judul",
+    sample: "contoh",
+    emptyEditor: "Tulis dulu ya, baru bisa diringkas.",
+    thinking: "Lagi mikir…",
+    failedBody: "Ups, gagal. Coba lagi ya.",
+    deleteNote: "Hapus catatan",
+    deleteConfirm: "Hapus “{title}”?",
+    deviceOnly: "Catatanku jangan keluar dari HP ini",
+    deviceOnlyHint: "Kalau aktif, AI cloud tidak dipakai.",
+    statusReady: "● Siap",
+    statusDemo: "● Demo",
+    footer: "Gratis, tanpa akun. Catatanmu tidak keluar dari HP ini.",
+    howItWorks: "Cara kerja",
+    steps: "1 Tulis atau tempel teks · 2 Pencet ✦ Ringkas · 3 Baca hasilnya di bawah",
+    resultEmpty: "Model tidak memberikan hasil.",
+    noActions: "Tidak ada yang harus dilakukan di catatan ini.",
+    lblKeyPoints: "Poin penting",
+    lblActionItems: "Yang harus dilakukan",
+    lblTags: "Tag",
+    enableAI: "Aktifkan AI di HP ini",
+    enableReady: "AI di HP ini sudah siap ✓",
+    enableUnavailable: "AI di HP ini tidak tersedia",
+    stDemo: "Mode demo",
+    stDemoDetail: "Aplikasi jalan dengan mode demo dulu. Semua tetap bisa dipakai.",
+    stFailedDetail: "AI aslinya gagal dimuat. Nota tetap jalan dalam mode demo.",
+    stReadyEnable: "AI siap dinyalakan",
+    stReadyEnableDetail: "Pencet tombol di bawah sekali untuk menyiapkan AI di HP ini — atau langsung pakai, nanti disiapkan sendiri.",
+    stReady: "AI di HP ini sudah siap",
+    stReadyDetail: "Tugas pendek jalan di HP ini, gratis dan offline.",
+    stDownloading: "Lagi mengunduh AI…",
+    stDownloadingDetail: "Sekali saja mengunduh AI-nya. Sambil menunggu, tugas pendek tetap jalan lewat internet.",
+    stNoNano: "AI di HP ini belum siap",
+    stNoNanoDetail: "Browser ini belum bisa menjalankan AI di HP. Jawaban tetap dibuat lewat internet atau demo. Semua tetap jalan.",
+    stNeedSetup: "AI asli butuh disiapkan dulu",
+    stNeedSetupDetail: "Lihat “Cara kerja” di bawah halaman. Mode demo tetap jalan untuk sekarang.",
+    stEnableFailed: "AI di HP ini gagal dinyalakan",
+    stEnableFailedDetail: "Tugas pendek tetap jalan lewat internet dan diberi label.",
+    replyThanks: "Makasih udah berbagi. Intinya: ",
+    replyActions: "\n\nSoal yang harus dilakukan — ",
+    replyClose: "\n\nKasih tahu aku ya kalau mau dilanjutin.",
+    routeDeep: "Analisis mendalam jalan di cloud — kamu yang minta. Ini bukan bawaan.",
+    routeDeviceOnly: "Mode hanya-di-HP aktif: ini jalan di HP, atau tidak jalan sama sekali. Tidak ada yang keluar dari HP.",
+    titleSummarize: "Ringkasan",
+    titleKeypoints: "Poin penting",
+    titleActions: "Yang harus dilakukan",
+    titleTags: "Tag",
+    titleRewriteShorter: "Tulis ulang — lebih singkat",
+    titleRewriteFormal: "Tulis ulang — lebih formal",
+    titleRewriteSimple: "Tulis ulang — lebih sederhana",
+    titleProofread: "Perbaiki tulisan",
+    titleReply: "Balasan",
+    titleDeep: "Analisis mendalam",
+  },
+};
+
+function detectLang() {
+  try {
+    const saved = localStorage.getItem(LS_LANG);
+    if (saved === "id" || saved === "en") return saved;
+  } catch (e) { /* storage unavailable — fall through */ }
+  const nav = (navigator.language || "en").toLowerCase();
+  if (nav.startsWith("id")) return "id";
+  return "en";
+}
+let lang = detectLang();
+function t(key) {
+  return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+}
+function wordsText(n) {
+  return lang === "id" ? `${n} kata` : `${n} word${n === 1 ? "" : "s"}`;
+}
 
 /* ---------------- state ---------------- */
 let notes = [];
 let activeId = null;
-let deviceOnly = localStorage.getItem(LS_DEVICE_ONLY) === "1";
+let deviceOnly = false;
+try { deviceOnly = localStorage.getItem(LS_DEVICE_ONLY) === "1"; } catch (e) { /* ignore */ }
 let firebaseReady = false;
+let justSeeded = false; // true when the sample notes were created this visit
 let firebaseError = "";
 let ai = null;          // Firebase AI service (getAI)
 let hybridModel = null; // PREFER_ON_DEVICE model (gemini-3.8-flash cloud fallback)
@@ -41,6 +251,7 @@ let deviceModelState = "unknown"; // unknown | checking | downloading | availabl
 let deviceModelProgress = 0;
 let lastResultText = "";
 let lastResultKind = "";
+let lastResultCtx = null; // {action, source} — so a language switch can re-label the visible result
 let fb = null; // dynamically imported firebase modules
 
 /* ---------------- helpers ---------------- */
@@ -58,7 +269,7 @@ function uid() {
   return "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 function nowLabel(ts) {
-  return new Date(ts).toLocaleString(undefined, {
+  return new Date(ts).toLocaleString(lang === "id" ? "id-ID" : "en-US", {
     month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -66,11 +277,15 @@ function setStatus(title, detail) {
   $("ai-status-title").textContent = title;
   $("ai-status-detail").textContent = detail;
 }
-function setPill(text, kind) {
-  const pill = $("ai-pill");
-  pill.textContent = text;
-  pill.classList.toggle("ok", kind === "ok");
-  pill.classList.toggle("warn", kind === "warn");
+function setDot() {
+  const dot = $("status-dot");
+  const ready = firebaseReady && deviceModelState === "available";
+  dot.textContent = ready ? t("statusReady") : t("statusDemo");
+  dot.classList.toggle("ok", ready);
+  dot.classList.toggle("warn", !ready);
+}
+function showStatusPanel(show) {
+  $("status-panel").hidden = !show;
 }
 
 /* ---------------- notes store (localStorage only) ---------------- */
@@ -78,15 +293,15 @@ function seedNotes() {
   return [
     {
       id: uid(),
-      title: "Why hybrid AI matters for notes",
-      body: "Most AI notes apps send everything you write to a server. That means your private notes, your meeting minutes and your half-finished ideas all leave your device before you get a summary back. It also means the app stops working on a plane, and the good features sit behind a twenty dollar monthly subscription.\n\nHybrid inference flips that around. Short, everyday jobs like summarising a note, fixing grammar, rewriting a paragraph or tagging a page run on the device itself with Gemini Nano. The text never leaves your phone or laptop, it costs nothing per request, and it works with no connection at all.\n\nThe cloud still has a job. Long documents, deep analysis and anything that needs real world knowledge go to Gemini Flash or Pro in the cloud. The honest design is to show which path answered every single request, and to let the user choose. That is what Nota does: every answer carries an ON DEVICE or IN CLOUD chip, and a switch keeps your notes on this device when you want that.\n\nAction items from this note: try the Summarise button on this note, then try Rewrite simpler, then turn on Keep my notes on this device and run it again to see the difference.",
+      title: "Rapat tim — 18 Nov",
+      body: "Hadir: Maya, Rizky, Dara.\n\nMaya kirim revisi timeline launching hari Jumat. Rizky pegang teks halaman harga, minta feedback Dara sebelum Kamis siang. Dara bilang email onboarding masih nunjuk ke artikel bantuan lama — dia yang betulin.\n\nKeputusan: beta dibuka buat 200 pengguna waitlist hari Selasa, bukan Senin.",
       updated: Date.now(),
       sample: true,
     },
     {
       id: uid(),
-      title: "Team sync — 18 Nov",
-      body: "Attendees: Maya, Rizky, Dara. Maya will send the revised launch timeline by Friday. Rizky owns the pricing page copy and needs feedback from Dara before Thursday lunch. Dara flagged that the onboarding email still links to the old help centre article and offered to rewrite it.\n\nDecisions: we launch the beta to the first 200 waitlist users next Tuesday, not Monday, because support cover is thin on Mondays. The free plan keeps 50 notes, the paid plan is unlimited.\n\nRisks: the analytics dashboard is two days behind schedule. If it slips again we cut the cohort chart from v1 and ship the rest. Maya to confirm the support rota by tomorrow morning.",
+      title: "Belanja mingguan",
+      body: "Beras 5 kg, telur 1 kg, ayam 1 ekor, sayur bayam 2 ikat, pisang 1 sisir.\n\nJangan lupa beli kopi — stok di rumah tinggal buat 2 hari.",
       updated: Date.now() - 3600e3,
       sample: true,
     },
@@ -102,14 +317,19 @@ function loadNotes() {
   } catch (e) { notes = []; }
   if (notes.length === 0) {
     notes = seedNotes();
+    justSeeded = true;
     saveNotes();
   }
-  activeId = localStorage.getItem(LS_ACTIVE);
+  try {
+    activeId = localStorage.getItem(LS_ACTIVE);
+  } catch (e) { activeId = null; }
   if (!notes.some((n) => n.id === activeId)) activeId = notes[0].id;
 }
 function saveNotes() {
-  localStorage.setItem(LS_NOTES, JSON.stringify(notes));
-  localStorage.setItem(LS_ACTIVE, activeId || "");
+  try {
+    localStorage.setItem(LS_NOTES, JSON.stringify(notes));
+    localStorage.setItem(LS_ACTIVE, activeId || "");
+  } catch (e) { /* storage unavailable — notes live in memory only */ }
 }
 function activeNote() { return notes.find((n) => n.id === activeId) || notes[0]; }
 
@@ -120,14 +340,14 @@ function renderList(filter = "") {
     .filter((n) => !q || (n.title + " " + n.body).toLowerCase().includes(q))
     .sort((a, b) => b.updated - a.updated);
   if (shown.length === 0) {
-    list.innerHTML = '<li class="nl-empty">No notes match that search.</li>';
+    list.innerHTML = `<li class="nl-empty">${esc(t("noMatch"))}</li>`;
     return;
   }
   list.innerHTML = shown.map((n) => `
     <li data-id="${n.id}" class="${n.id === activeId ? "active" : ""}">
-      <div class="nl-title">${esc(n.title || "Untitled note")}</div>
+      <div class="nl-title">${esc(n.title || t("untitled"))}</div>
       <div class="nl-preview">${esc(n.body.split("\n")[0].slice(0, 80))}</div>
-      <div class="nl-date">${nowLabel(n.updated)}${n.sample ? " · sample" : ""}</div>
+      <div class="nl-date">${nowLabel(n.updated)}${n.sample ? " · " + t("sample") : ""}</div>
     </li>`).join("");
   list.querySelectorAll("li[data-id]").forEach((li) => {
     li.addEventListener("click", () => { setActive(li.dataset.id); });
@@ -149,45 +369,97 @@ function setActive(id) {
 }
 function updateMeta() {
   const text = $("note-body").value;
-  const tokens = estimateTokens(text);
-  $("word-count").textContent = `${wordCount(text)} words`;
-  $("token-est").textContent = `~${tokens.toLocaleString()} tokens`;
-  const hint = $("route-hint");
-  if (deviceOnly) {
-    hint.textContent = "Device-only is on — this will run on-device, or not at all.";
-  } else if (tokens > (window.NOTA_LONG_DOC_TOKENS || 3500)) {
-    hint.textContent = "Long document — this will go to Gemini Flash in the cloud.";
-  } else if (firebaseReady) {
-    hint.textContent = "Short note — will try Gemini Nano on-device first.";
-  } else {
-    hint.textContent = "Local demo mode — connect Firebase for real Nano / Flash.";
-  }
+  $("word-count").textContent = wordsText(wordCount(text));
 }
 
-/* ---------------- AI prompts ---------------- */
+/* ---------------- language ---------------- */
+function applyLang(next) {
+  lang = next === "id" || next === "en" ? next : detectLang();
+  try { localStorage.setItem(LS_LANG, lang); } catch (e) { /* ignore */ }
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.dataset.i18n;
+    if (I18N[lang][key] !== undefined) el.textContent = I18N[lang][key];
+  });
+  $("note-title").placeholder = t("titlePlaceholder");
+  $("note-body").placeholder = t("bodyPlaceholder");
+  $("search").placeholder = t("searchLabel");
+  $("btn-summarize").textContent = t("summarizeMain");
+  $("btn-more").textContent = t("more");
+  $("btn-delete-note").textContent = t("deleteNote");
+  $("btn-enable-ai").textContent =
+    deviceModelState === "available" ? t("enableReady") :
+    deviceModelState === "unavailable" ? t("enableUnavailable") : t("enableAI");
+  document.querySelectorAll(".lang-toggle button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.lang === lang);
+  });
+  setDot();
+  renderList($("search").value);
+  updateMeta();
+  // Re-label the visible result (its body stays as generated).
+  if (!$("ai-result").hidden && lastResultCtx) {
+    $("ai-result-title").textContent = ACTION_TITLES[lastResultCtx.action] || t("resultTitle");
+    const chip = $("ai-result-chip");
+    const map = { device: [t("chipDevice"), "chip-device"], cloud: [t("chipCloud"), "chip-cloud"], demo: [t("chipDemo"), "chip-demo"], failed: [t("chipFailed"), "chip-demo"] };
+    const c = map[lastResultCtx.source] || map.demo;
+    chip.textContent = c[0];
+    chip.className = "chip " + c[1];
+    $("ai-result-note").textContent = lastResultCtx.note || "";
+  }
+  maybeShowHint();
+}
+function setLang(next) { applyLang(next); }
+
+/* ---------------- first-run hint ---------------- */
+function maybeShowHint() {
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(LS_HINT) === "1"; } catch (e) { /* ignore */ }
+  const n = activeNote();
+  const empty = !n || !(n.body || "").trim();
+  $("first-run").hidden = dismissed || !(justSeeded || empty);
+}
+
+/* ---------------- AI prompts ----------------
+ * The reply language follows the UI language. JSON keys stay
+ * English; only the values are answered in the chosen language. */
+function langLine() {
+  return lang === "id"
+    ? "Jawab dalam Bahasa Indonesia. (Kunci JSON tetap bahasa Inggris.)\n\n"
+    : "Reply in English.\n\n";
+}
 const PROMPTS = {
-  summarize: (text) => `Summarise the following note. Reply with JSON only, no other text: {"tldr": "one or two sentences", "keyPoints": ["...", "..."], "actionItems": ["...", "..."], "tags": ["...", "..."]}\n\nNOTE:\n${text}`,
-  keypoints: (text) => `List the key points of the following note. Reply with JSON only, no other text: {"keyPoints": ["...", "..."]}\n\nNOTE:\n${text}`,
-  actions: (text) => `Extract the action items from the following note: who does what, by when, if stated. Reply with JSON only, no other text: {"actionItems": ["...", "..."]}\n\nNOTE:\n${text}`,
-  tags: (text) => `Suggest 3 to 6 short tags for the following note. Reply with JSON only, no other text: {"tags": ["...", "..."]}\n\nNOTE:\n${text}`,
-  "rewrite-shorter": (text) => `Rewrite the following note to be about half as long. Keep every important fact, drop repetition and filler. Reply with the rewritten text only.\n\nNOTE:\n${text}`,
-  "rewrite-formal": (text) => `Rewrite the following note in a formal, professional tone. Keep every fact and all names, dates and numbers exactly. Reply with the rewritten text only.\n\nNOTE:\n${text}`,
-  "rewrite-simple": (text) => `Rewrite the following note in plain, simple language: short sentences, everyday words, easy to read for anyone. Keep every fact. Reply with the rewritten text only.\n\nNOTE:\n${text}`,
-  proofread: (text) => `Proofread the following note. Fix grammar, spelling and punctuation only — do not change the meaning, tone or facts. Reply with the corrected text only.\n\nNOTE:\n${text}`,
-  reply: (text) => `Draft a short, polite reply to the following note or message. Keep it warm and to the point. Reply with the draft only.\n\nNOTE:\n${text}`,
-  deep: (text) => `Analyse the following note in depth. Cover: (1) what it is really about, (2) what is missing or unclear, (3) risks or contradictions, (4) concrete next steps. Reply in clear sections with short paragraphs.\n\nNOTE:\n${text}`,
+  summarize: (text) => langLine() + `Summarise the following note. Reply with JSON only, no other text: {"tldr": "one or two sentences", "keyPoints": ["...", "..."], "actionItems": ["...", "..."], "tags": ["...", "..."]}\n\nNOTE:\n${text}`,
+  keypoints: (text) => langLine() + `List the key points of the following note. Reply with JSON only, no other text: {"keyPoints": ["...", "..."]}\n\nNOTE:\n${text}`,
+  actions: (text) => langLine() + `Extract the action items from the following note: who does what, by when, if stated. Reply with JSON only, no other text: {"actionItems": ["...", "..."]}\n\nNOTE:\n${text}`,
+  tags: (text) => langLine() + `Suggest 3 to 6 short tags for the following note. Reply with JSON only, no other text: {"tags": ["...", "..."]}\n\nNOTE:\n${text}`,
+  "rewrite-shorter": (text) => langLine() + `Rewrite the following note to be about half as long. Keep every important fact, drop repetition and filler. Reply with the rewritten text only.\n\nNOTE:\n${text}`,
+  "rewrite-formal": (text) => langLine() + `Rewrite the following note in a formal, professional tone. Keep every fact and all names, dates and numbers exactly. Reply with the rewritten text only.\n\nNOTE:\n${text}`,
+  "rewrite-simple": (text) => langLine() + `Rewrite the following note in plain, simple language: short sentences, everyday words, easy to read for anyone. Keep every fact. Reply with the rewritten text only.\n\nNOTE:\n${text}`,
+  proofread: (text) => langLine() + `Proofread the following note. Fix grammar, spelling and punctuation only — do not change the meaning, tone or facts. Reply with the corrected text only.\n\nNOTE:\n${text}`,
+  reply: (text) => langLine() + `Draft a short, polite reply to the following note or message. Keep it warm and to the point. Reply with the draft only.\n\nNOTE:\n${text}`,
+  deep: (text) => langLine() + `Analyse the following note in depth. Cover: (1) what it is really about, (2) what is missing or unclear, (3) risks or contradictions, (4) concrete next steps. Reply in clear sections with short paragraphs.\n\nNOTE:\n${text}`,
 };
 const ACTION_TITLES = {
-  summarize: "Summary", keypoints: "Key points", actions: "Action items", tags: "Tags",
-  "rewrite-shorter": "Rewrite — shorter", "rewrite-formal": "Rewrite — formal",
-  "rewrite-simple": "Rewrite — simpler", proofread: "Proofread", reply: "Draft reply",
-  deep: "Deep analysis",
+  summarize: () => t("titleSummarize"),
+  keypoints: () => t("titleKeypoints"),
+  actions: () => t("titleActions"),
+  tags: () => t("titleTags"),
+  "rewrite-shorter": () => t("titleRewriteShorter"),
+  "rewrite-formal": () => t("titleRewriteFormal"),
+  "rewrite-simple": () => t("titleRewriteSimple"),
+  proofread: () => t("titleProofread"),
+  reply: () => t("titleReply"),
+  deep: () => t("titleDeep"),
 };
+function actionTitle(action) {
+  const fn = ACTION_TITLES[action];
+  return fn ? fn() : t("resultTitle");
+}
 const JSON_ACTIONS = new Set(["summarize", "keypoints", "actions", "tags"]);
 
 /* ---------------- local demo engine (no Firebase) ----------------
  * Small extractive algorithm, runs entirely in the browser.
- * It is NEVER presented as Nano or Flash. */
+ * It is NEVER presented as on-device or cloud AI. */
 const STOPWORDS = new Set(("a,an,the,and,or,but,if,then,else,when,at,by,for,with,about,into,through,after,over,between,out,against,during,without,before,under,around,among,of,to,in,on,from,as,is,are,was,were,be,been,being,have,has,had,do,does,did,will,would,shall,should,can,could,may,might,must,i,you,he,she,it,we,they,this,that,these,those,am,an,my,your,his,her,its,our,their,me,him,us,them,what,which,who,whom,how,why,not,no,yes,so,very,just,also,than,too,more,most,other,some,any,only,own,same,such,each,few,more,most,all,both,each,few,more,most,other,some,such,no,nor,not,only,own,same,so,than,too,very,can,will,just,don,should,now").split(","));
 function splitSentences(text) {
   return (text || "").replace(/\s+/g, " ").match(/[^.!?]+[.!?]+["')\]]*\s*/g) || (text ? [text] : []);
@@ -240,7 +512,7 @@ function demoRewrite(text, kind) {
   }
   if (kind === "reply") {
     const a = demoAnalyze(text);
-    return `Thanks for sharing this. My main takeaways: ${a.keyPoints.slice(0, 2).join(" ")}${a.actionItems.length ? `\n\nOn actions — ${a.actionItems[0]}` : ""}\n\nLet me know if you'd like me to take any of this further.`;
+    return `${t("replyThanks")}${a.keyPoints.slice(0, 2).join(" ")}${a.actionItems.length ? `${t("replyActions")}${a.actionItems[0]}` : ""}${t("replyClose")}`;
   }
   return text;
 }
@@ -254,7 +526,7 @@ function runDemo(action, text) {
 }
 
 /* ---------------- result rendering ---------------- */
-function showResult(title, chipText, chipClass, bodyHtml, note, plainText, kind) {
+function showResult(title, chipText, chipClass, bodyHtml, note, plainText, kind, ctx) {
   const box = $("ai-result");
   box.hidden = false;
   $("ai-result-title").textContent = title;
@@ -265,31 +537,33 @@ function showResult(title, chipText, chipClass, bodyHtml, note, plainText, kind)
   $("ai-result-note").textContent = note || "";
   lastResultText = plainText || "";
   lastResultKind = kind || "text";
+  lastResultCtx = ctx || null;
+  if (lastResultCtx) lastResultCtx.note = note || "";
   box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
-function hideResult() { $("ai-result").hidden = true; }
+function hideResult() { $("ai-result").hidden = true; lastResultCtx = null; }
 function jsonToHtml(data) {
   let html = "";
   if (data.tldr) html += `<p><strong>TL;DR:</strong> ${esc(data.tldr)}</p>`;
   if (data.keyPoints && data.keyPoints.length) {
-    html += "<p><strong>Key points</strong></p><ul>" + data.keyPoints.map((p) => `<li>${esc(p)}</li>`).join("") + "</ul>";
+    html += `<p><strong>${esc(t("lblKeyPoints"))}</strong></p><ul>` + data.keyPoints.map((p) => `<li>${esc(p)}</li>`).join("") + "</ul>";
   }
   if (data.actionItems && data.actionItems.length) {
-    html += "<p><strong>Action items</strong></p><ul>" + data.actionItems.map((p) => `<li>${esc(p)}</li>`).join("") + "</ul>";
+    html += `<p><strong>${esc(t("lblActionItems"))}</strong></p><ul>` + data.actionItems.map((p) => `<li>${esc(p)}</li>`).join("") + "</ul>";
   } else if (data.actionItems) {
-    html += "<p><em>No clear action items found in this note.</em></p>";
+    html += `<p><em>${esc(t("noActions"))}</em></p>`;
   }
   if (data.tags && data.tags.length) {
-    html += "<p><strong>Tags</strong></p><p>" + data.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("") + "</p>";
+    html += `<p><strong>${esc(t("lblTags"))}</strong></p><p>` + data.tags.map((tg) => `<span class="tag">${esc(tg)}</span>`).join("") + "</p>";
   }
-  return html || "<p><em>The model returned an empty result.</em></p>";
+  return html || `<p><em>${esc(t("resultEmpty"))}</em></p>`;
 }
 function jsonToPlain(data) {
   const lines = [];
   if (data.tldr) lines.push("TL;DR: " + data.tldr);
-  if (data.keyPoints) lines.push("", "Key points:", ...data.keyPoints.map((p) => "- " + p));
-  if (data.actionItems) lines.push("", "Action items:", ...data.actionItems.map((p) => "- " + p));
-  if (data.tags) lines.push("", "Tags: " + data.tags.join(", "));
+  if (data.keyPoints) lines.push("", t("lblKeyPoints") + ":", ...data.keyPoints.map((p) => "- " + p));
+  if (data.actionItems) lines.push("", t("lblActionItems") + ":", ...data.actionItems.map((p) => "- " + p));
+  if (data.tags) lines.push("", t("lblTags") + ": " + data.tags.join(", "));
   return lines.join("\n");
 }
 function extractJson(text) {
@@ -307,10 +581,8 @@ function firebaseConfigured() {
 
 async function initFirebase() {
   if (!firebaseConfigured()) {
-    setPill("AI: local demo", "warn");
-    setStatus("On-device AI: not connected",
-      "Firebase is not configured yet, so Nota runs in local demo mode. Follow the 5-minute setup in the README to unlock real Gemini Nano + Gemini Flash.");
-    $("firebase-note").hidden = false;
+    setDot();
+    setStatus(t("stDemo"), t("stDemoDetail"));
     probeNanoAvailability();
     return;
   }
@@ -330,7 +602,7 @@ async function initFirebase() {
     // App Check: enforced for AI Logic. If a reCAPTCHA Enterprise site key
     // is provided in firebase-config.js we use it; otherwise App Check
     // initialisation is attempted with the debug provider on localhost and
-    // the status bar says exactly what is missing.
+    // the status panel says exactly what is missing.
     try {
       if (window.NOTA_RECAPTCHA_SITE_KEY) {
         fb.initializeAppCheck(app, { provider: new fb.ReCaptchaEnterpriseProvider(window.NOTA_RECAPTCHA_SITE_KEY) });
@@ -347,37 +619,31 @@ async function initFirebase() {
     cloudModel = fb.getGenerativeModel(ai, { model: flash, mode: fb.InferenceMode.PREFER_IN_CLOUD });
     proModel = fb.getGenerativeModel(ai, { model: models.pro || "gemini-3.1-pro-preview", mode: fb.InferenceMode.ONLY_IN_CLOUD });
     firebaseReady = true;
-    $("firebase-note").hidden = true;
-    setPill("AI: Firebase connected", "ok");
-    setStatus("On-device AI: ready to enable",
-      "Firebase AI Logic is connected. Press “Enable on-device AI” once to download Gemini Nano, or just run an action — the first run starts the download.");
+    setDot();
+    setStatus(t("stReadyEnable"), t("stReadyEnableDetail"));
     probeNanoAvailability();
   } catch (e) {
     firebaseReady = false;
     firebaseError = String(e && e.message ? e.message : e);
     console.error("Nota: Firebase init failed:", e);
-    setPill("AI: local demo", "warn");
-    setStatus("On-device AI: Firebase failed to load",
-      "Firebase could not be initialised (" + firebaseError + "). Nota keeps working in local demo mode — check the README setup steps.");
+    setDot();
+    setStatus(t("stDemo"), t("stFailedDetail"));
     probeNanoAvailability();
   }
 }
 
 /* Enable-button states: never present a big green CTA that can only fail. */
-function setEnableButton(state, reason) {
+function setEnableButton(state) {
   const btn = $("btn-enable-ai");
   if (state === "unavailable") {
     btn.disabled = true;
-    btn.title = reason || "Gemini Nano is not available in this browser.";
-    btn.textContent = "On-device AI unavailable";
+    btn.textContent = t("enableUnavailable");
   } else if (state === "ready") {
     btn.disabled = true;
-    btn.title = "Gemini Nano is downloaded and ready.";
-    btn.textContent = "On-device AI ready ✓";
+    btn.textContent = t("enableReady");
   } else {
     btn.disabled = false;
-    btn.title = "";
-    btn.textContent = "Enable on-device AI";
+    btn.textContent = t("enableAI");
   }
 }
 
@@ -385,11 +651,10 @@ async function probeNanoAvailability() {
   try {
     if (typeof LanguageModel === "undefined") {
       if (deviceModelState === "unknown") {
-        setStatus("On-device AI: not available in this browser",
-          "This browser does not expose the Chrome Prompt API (LanguageModel). On-device Nano needs Chrome 139+ on desktop. " +
-          (firebaseReady ? "Cloud fallback still works." : "Local demo mode still works."));
         deviceModelState = "unavailable";
-        setEnableButton("unavailable", "This browser does not expose the Chrome Prompt API (LanguageModel). On-device Nano needs Chrome 139+ on desktop.");
+        setEnableButton("unavailable");
+        setStatus(t("stNoNano"), t("stNoNanoDetail"));
+        setDot();
       }
       return;
     }
@@ -397,64 +662,64 @@ async function probeNanoAvailability() {
     const avail = await LanguageModel.availability();
     if (avail === "available") {
       deviceModelState = "available";
-      setEnableButton("enabled");
-      setStatus("On-device AI: Gemini Nano is on this device",
-        "The on-device model is downloaded and ready. Short tasks will run on-device, free and offline.");
+      setEnableButton("ready");
+      setStatus(t("stReady"), t("stReadyDetail"));
+      setDot();
     } else if (avail === "downloading" || avail === "downloadable") {
       deviceModelState = "downloading";
       setEnableButton("enabled");
-      setStatus("On-device AI: model " + (avail === "downloading" ? "downloading…" : "ready to download"),
-        "Press “Enable on-device AI” to start (or finish) the one-time model download. Until it is ready, short tasks use the cloud fallback and say so.");
+      setStatus(t("stDownloading"), t("stDownloadingDetail"));
+      setDot();
     } else {
       deviceModelState = "unavailable";
-      setEnableButton("unavailable", "Gemini Nano reported availability “" + avail + "” on this device, so the on-device model cannot run here.");
-      setStatus("On-device AI: unavailable on this device",
-        "Gemini Nano reported availability “" + avail + "” here, so the on-device model cannot run on this device. " + (firebaseReady ? "Cloud fallback still works and is labelled IN CLOUD." : "Local demo mode still works."));
+      setEnableButton("unavailable");
+      setStatus(t("stNoNano"), t("stNoNanoDetail"));
+      setDot();
     }
   } catch (e) {
     deviceModelState = "unavailable";
     setEnableButton("unavailable");
+    setDot();
   }
 }
 
-async function enableOnDeviceAI(progressNote) {
+async function enableOnDeviceAI() {
   if (!firebaseReady || !hybridModel) {
-    setStatus("On-device AI: connect Firebase first",
-      "The real on-device model needs a Firebase project (README, 5-minute setup). Until then, Nota runs in local demo mode.");
+    setStatus(t("stNeedSetup"), t("stNeedSetupDetail"));
+    showStatusPanel(true);
     return false;
   }
   deviceModelState = "downloading";
   $("model-progress").hidden = false;
-  expandAiDetails();
-  setStatus("On-device AI: downloading model…", "First run downloads Gemini Nano once (~2–4 GB). You can keep using the app — short tasks will use the cloud until the download finishes.");
+  showStatusPanel(true);
+  setStatus(t("stDownloading"), t("stDownloadingDetail"));
   try {
     await hybridModel.initializeDeviceModel((fraction) => {
       deviceModelProgress = Math.round(fraction * 10000) / 100;
       $("model-progress-bar").style.width = deviceModelProgress + "%";
-      setStatus("On-device AI: downloading model… " + deviceModelProgress + "%",
-        "First run downloads Gemini Nano once (~2–4 GB). Short tasks use the cloud fallback until it is ready.");
+      setStatus(`${t("stDownloading")} ${deviceModelProgress}%`, t("stDownloadingDetail"));
     });
     deviceModelState = "available";
     $("model-progress").hidden = true;
     setEnableButton("ready");
-    setStatus("On-device AI: Gemini Nano is on this device",
-      "The on-device model is downloaded and ready. Short tasks will run on-device, free and offline.");
+    setStatus(t("stReady"), t("stReadyDetail"));
+    setDot();
     return true;
   } catch (e) {
     deviceModelState = "unavailable";
     $("model-progress").hidden = true;
-    setStatus("On-device AI: could not start the model (" + (e && e.message ? e.message : e) + ")",
-      "Short tasks will use the Gemini Flash cloud fallback and say so (IN CLOUD chip).");
+    setStatus(t("stEnableFailed"), t("stEnableFailedDetail"));
+    setDot();
     return false;
   }
 }
 
 /* ---------------- running an AI action ---------------- */
-async function runAction(action, opts = {}) {
+async function runAction(action) {
   const note = activeNote();
   const text = ($("note-body").value || "").trim();
   if (!text) {
-    showResult(ACTION_TITLES[action], "—", "", "<p><em>Write or paste some text first.</em></p>", "", "", "text");
+    showResult(actionTitle(action), "—", "", `<p><em>${esc(t("emptyEditor"))}</em></p>`, "", "", "text", { action, source: "failed" });
     return;
   }
   const tokens = estimateTokens(text);
@@ -462,18 +727,21 @@ async function runAction(action, opts = {}) {
   const deep = action === "deep";
   const buttons = document.querySelectorAll("[data-action]");
   buttons.forEach((b) => { b.disabled = true; });
-  showResult(ACTION_TITLES[action], "… working", "", "<p><em>Thinking…</em></p>", "", "", "text");
+  showResult(actionTitle(action), "…", "", `<p><em>${esc(t("thinking"))}</em></p>`, "", "", "text", { action, source: "demo" });
+  // Close the "More" panel after picking an action — one pattern to learn.
+  $("more-panel").hidden = true;
+  $("btn-more").setAttribute("aria-expanded", "false");
 
   try {
     /* --- no Firebase: local demo, clearly labelled --- */
     if (!firebaseReady) {
       await new Promise((r) => setTimeout(r, 350)); // let the UI paint
       const out = runDemo(action, text);
-      const noteTxt = "LOCAL DEMO — connect Firebase (README) for real Gemini Nano / Flash. This result was made in your browser by a simple local algorithm, not by an AI model.";
+      const noteTxt = t("noteDemo");
       if (out.kind === "json") {
-        showResult(ACTION_TITLES[action], "LOCAL DEMO", "chip-demo", jsonToHtml(out.data), noteTxt, jsonToPlain(out.data), "json");
+        showResult(actionTitle(action), t("chipDemo"), "chip-demo", jsonToHtml(out.data), noteTxt, jsonToPlain(out.data), "json", { action, source: "demo" });
       } else {
-        showResult(ACTION_TITLES[action], "LOCAL DEMO", "chip-demo", `<p>${esc(out.data)}</p>`, noteTxt, out.data, "text");
+        showResult(actionTitle(action), t("chipDemo"), "chip-demo", `<p>${esc(out.data)}</p>`, noteTxt, out.data, "text", { action, source: "demo" });
       }
       return;
     }
@@ -487,21 +755,26 @@ async function runAction(action, opts = {}) {
 
     let model;
     let routeNote = "";
+    let routeKey = "cloud";
     if (deep) {
       model = proModel;
-      routeNote = "Deep analysis runs in the cloud on Gemini Pro — you asked for it. It is never the default.";
+      routeNote = t("routeDeep");
+      routeKey = "cloud";
     } else if (deviceOnly) {
       model = fb.getGenerativeModel(ai, {
         model: (window.NOTA_CLOUD_MODELS || {}).flash || "gemini-3.8-flash",
         mode: fb.InferenceMode.ONLY_ON_DEVICE,
       });
-      routeNote = "Device-only is on: this ran on-device, or not at all. Nothing left the device.";
+      routeNote = t("routeDeviceOnly");
+      routeKey = "device";
     } else if (isLong) {
       model = cloudModel;
-      routeNote = `Long document (~${tokens.toLocaleString()} tokens, over the ~${(window.NOTA_LONG_DOC_TOKENS || 3500).toLocaleString()} token on-device limit) — routed to Gemini Flash in the cloud.`;
+      routeNote = t("noteCloudLong");
+      routeKey = "cloud";
     } else {
       model = hybridModel;
       routeNote = "";
+      routeKey = "cloud";
     }
 
     const prompt = PROMPTS[action](text);
@@ -526,43 +799,31 @@ async function runAction(action, opts = {}) {
     const response = result.response;
     const source = response.inferenceSource; // 'ON_DEVICE' | 'IN_CLOUD' | undefined
     const raw = response.text();
-    const chip = source === "ON_DEVICE"
-      ? ["ON DEVICE", "chip-device"]
-      : source === "IN_CLOUD"
-        ? ["IN CLOUD", "chip-cloud"]
-        : deep ? ["IN CLOUD", "chip-cloud"] : ["IN CLOUD", "chip-cloud"];
-    const srcNote = source === "ON_DEVICE"
-      ? "Ran on-device with Gemini Nano — free, private, and your text never left this device."
-      : source === "IN_CLOUD"
-        ? "Ran in the cloud with Gemini Flash. " + routeNote
-        : "Cloud model answered (the SDK did not report a source for this call). " + routeNote;
+    const onDevice = source === "ON_DEVICE";
+    const chip = onDevice ? [t("chipDevice"), "chip-device"] : [t("chipCloud"), "chip-cloud"];
+    const srcNote = onDevice
+      ? t("noteDevice")
+      : (routeNote || t("noteCloud"));
 
     if (JSON_ACTIONS.has(action) && !deep) {
       const data = extractJson(raw);
       if (data) {
-        showResult(ACTION_TITLES[action], chip[0], chip[1], jsonToHtml(data), srcNote, jsonToPlain(data), "json");
+        showResult(actionTitle(action), chip[0], chip[1], jsonToHtml(data), srcNote, jsonToPlain(data), "json", { action, source: onDevice ? "device" : "cloud" });
       } else {
-        showResult(ACTION_TITLES[action], chip[0], chip[1], `<p>${esc(raw)}</p>`, srcNote + " (The model did not return JSON, so the raw text is shown.)", raw, "text");
+        showResult(actionTitle(action), chip[0], chip[1], `<p>${esc(raw)}</p>`, srcNote, raw, "text", { action, source: onDevice ? "device" : "cloud" });
       }
     } else {
-      showResult(ACTION_TITLES[action], chip[0], chip[1], `<p>${esc(raw)}</p>`, deep ? routeNote : srcNote, raw, "text");
+      showResult(actionTitle(action), chip[0], chip[1], `<p>${esc(raw)}</p>`, deep ? routeNote : srcNote, raw, "text", { action, source: onDevice ? "device" : "cloud" });
     }
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
     console.error("Nota: AI action failed:", e);
-    showResult(ACTION_TITLES[action], "FAILED", "chip-demo",
-      `<p><em>The AI call failed: ${esc(msg)}</em></p><p>Nothing was silently faked. If the on-device model is still downloading, wait and try again — or check the Firebase setup in the README.</p>`,
-      "", "", "text");
+    showResult(actionTitle(action), t("chipFailed"), "chip-demo",
+      `<p><em>${esc(t("failedBody"))}</em></p>`,
+      "", "", "text", { action, source: "failed" });
   } finally {
     buttons.forEach((b) => { b.disabled = false; });
   }
-}
-
-function expandAiDetails() {
-  $("ai-details").hidden = false;
-  const btn = $("btn-ai-details");
-  btn.setAttribute("aria-expanded", "true");
-  btn.textContent = "Hide details";
 }
 
 /* ---------------- wiring ---------------- */
@@ -587,37 +848,63 @@ function bindUI() {
     n.updated = Date.now();
     saveNotes();
     updateMeta();
+    maybeShowHint();
   });
   document.querySelectorAll("[data-action]").forEach((b) => {
     b.addEventListener("click", () => runAction(b.dataset.action));
   });
   $("btn-enable-ai").addEventListener("click", () => enableOnDeviceAI());
-  // Slim AI banner: Details expands the full panel, ✕ dismisses it to a
-  // small "AI status" pill in the top bar (so the banner never hides the
-  // product on a phone's first screen).
-  const detailsBtn = $("btn-ai-details");
-  const showDetails = (show) => {
-    $("ai-details").hidden = !show;
-    detailsBtn.setAttribute("aria-expanded", String(show));
-    detailsBtn.textContent = show ? "Hide details" : "Details";
-  };
-  detailsBtn.addEventListener("click", () => showDetails($("ai-details").hidden));
-  $("btn-ai-dismiss").addEventListener("click", () => {
-    $("ai-status").hidden = true;
-    $("btn-ai-reopen").hidden = false;
+  // Status dot: tap to open the small status panel (no big banner).
+  $("status-dot").addEventListener("click", () => {
+    showStatusPanel($("status-panel").hidden);
   });
-  $("btn-ai-reopen").addEventListener("click", () => {
-    $("ai-status").hidden = false;
-    $("btn-ai-reopen").hidden = true;
+  // Language toggle: segmented ID | EN, switches every label live.
+  document.querySelectorAll(".lang-toggle button").forEach((b) => {
+    b.addEventListener("click", () => setLang(b.dataset.lang));
+  });
+  // "More" panel: one extra tap reveals the other 9 actions, grouped.
+  $("btn-more").addEventListener("click", () => {
+    const panel = $("more-panel");
+    const open = panel.hidden;
+    panel.hidden = !open;
+    $("btn-more").setAttribute("aria-expanded", String(open));
+  });
+  // Note ⋯ menu: Delete lives here now, with confirmation.
+  $("btn-note-menu").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const menu = $("note-menu");
+    const open = menu.hidden;
+    menu.hidden = !open;
+    $("btn-note-menu").setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (e) => {
+    const menu = $("note-menu");
+    if (!menu.hidden && !e.target.closest(".editor-head")) menu.hidden = true;
+  });
+  $("btn-delete-note").addEventListener("click", () => {
+    const n = activeNote();
+    if (!n) return;
+    if (!confirm(t("deleteConfirm").replace("{title}", n.title || t("untitled")))) return;
+    notes = notes.filter((x) => x.id !== n.id);
+    if (notes.length === 0) notes = seedNotes();
+    activeId = notes[0].id;
+    saveNotes();
+    renderList($("search").value);
+    renderEditor();
+    maybeShowHint();
+  });
+  $("btn-hint-dismiss").addEventListener("click", () => {
+    try { localStorage.setItem(LS_HINT, "1"); } catch (e) { /* ignore */ }
+    $("first-run").hidden = true;
   });
   $("toggle-device-only").checked = deviceOnly;
   $("toggle-device-only").addEventListener("change", (e) => {
     deviceOnly = e.target.checked;
-    localStorage.setItem(LS_DEVICE_ONLY, deviceOnly ? "1" : "0");
+    try { localStorage.setItem(LS_DEVICE_ONLY, deviceOnly ? "1" : "0"); } catch (err) { /* ignore */ }
     updateMeta();
   });
   $("btn-copy-result").addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(lastResultText); $("ai-result-note").textContent = "Copied."; } catch (e) { $("ai-result-note").textContent = "Copy failed — select the text manually."; }
+    try { await navigator.clipboard.writeText(lastResultText); $("ai-result-note").textContent = t("copied"); } catch (e) { $("ai-result-note").textContent = t("copyFailed"); }
   });
   $("btn-apply-result").addEventListener("click", () => {
     if (!lastResultText) return;
@@ -628,38 +915,15 @@ function bindUI() {
     renderEditor();
     renderList($("search").value);
   });
-  // Delete button: quiet muted text, not a loud red control.
-  const del = document.createElement("button");
-  del.className = "btn btn-quiet";
-  del.type = "button";
-  del.textContent = "Delete note";
-  del.addEventListener("click", () => {
-    const n = activeNote();
-    if (!n) return;
-    if (!confirm(`Delete “${n.title || "Untitled note"}”?`)) return;
-    notes = notes.filter((x) => x.id !== n.id);
-    if (notes.length === 0) notes = seedNotes();
-    activeId = notes[0].id;
-    saveNotes();
-    renderList($("search").value);
-    renderEditor();
-  });
-  document.querySelector(".editor-meta").appendChild(del);
-
-  // Network indicator.
-  const net = () => {
-    const pill = $("net-pill");
-    pill.textContent = navigator.onLine ? "● online" : "● offline — on-device still works";
-    pill.classList.toggle("warn", !navigator.onLine);
-  };
-  window.addEventListener("online", net);
-  window.addEventListener("offline", net);
-  net();
 }
 
 /* ---------------- boot ---------------- */
+// ?lang=id|en deep-link (also used by headless verification).
+const qsLang = new URLSearchParams(location.search).get("lang");
+if (qsLang === "id" || qsLang === "en") lang = qsLang;
 loadNotes();
 bindUI();
+applyLang(lang);
 renderList("");
 renderEditor();
 initFirebase().catch((e) => console.error("Nota boot:", e));
